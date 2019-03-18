@@ -15,7 +15,7 @@ def rot2(theta):
 
 def rot2lin(phiz):
 	'''Linearization of rotation (small angle)'''
-	return np.eye(2) + phiz * np.array([[0, -1], [1, 0]])
+	return np.eye(2) + phiz * Skew2
 
 def screw(twistdt):
 	# Assuming SE(2)

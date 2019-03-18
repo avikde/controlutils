@@ -79,10 +79,10 @@ class MPCHelper:
 		for ti in range(self.N):
 			if len(x0.shape) > 1:
 				# a whole trajectory has been provided
-				Ad, Bd = self.m.getLin(x0[ti,:], u0[ti,:], dt)
+				Ad, Bd = self.m.getLinearDynamics(x0[ti,:], u0[ti,:])
 			elif ti == 0:
 				# only the current state provided; only need to call once
-				Ad, Bd = self.m.getLin(x0, u0, dt)
+				Ad, Bd = self.m.getLinearDynamics(x0, u0)
 			# Update the LTV dynamics
 			cscUpdateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
 		# Update initial state

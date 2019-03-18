@@ -19,13 +19,21 @@ After solving, apply u1 (MPC)
 # print(lineq.shape)
 '''
 
-class MPCHelper:
+class LTVMPC:
+	'''Interface that the provided "model" must provide:
+	- getLinearDynamics(y, u)
+	- getReference(y, u) - either returns a single goal point, or N points
+	- TBD nonlinear dynamics update
+	'''
+
+	# What to use over the horizon during the update for 
+	# If a single goal point is given, use dynamics at that, or if a trajectory is given
+	# use the linearization at each knot point
+	GIVEN_POINT_OR_TRAJ = 0
+	SQP = 1  # sequential QP
+
 	def __init__(self, model, N, wx, wu, **settings):
-		# Pass in nx=#states, nu=#inputs, and N=prediction horizon
-		# model must have:
-		# nx, nu, N
-		# getLimits()
-		# getLin()
+		# Pass in model, N=prediction horizon
 
 		self.m = model
 		self.N = N
@@ -52,8 +60,7 @@ class MPCHelper:
 		# Create the CSC A matrix manually. 
 		conA = CondensedA(self.m.nx, self.m.nu, N)
 		self.A = sparse.csc_matrix((conA.data, conA.indices, conA.indptr))
-		# make up xr for now - will get updated
-		# FIXME: instead of a single xr, need the ref here
+		# make up single goal xr for now - will get updated. NOTE: q is not sparse so we can update all of it
 		xr = np.zeros(self.m.nx)
 		x0 = np.zeros_like(xr)
 		q = np.hstack([np.kron(np.ones(N), -self.Q.dot(xr)), -self.QN.dot(xr), np.zeros(N*self.m.nu)])
@@ -68,30 +75,43 @@ class MPCHelper:
 		self.prob.setup(P, q, self.A, self.l, self.u, warm_start=True, **settings)#, eps_abs=1e-05, eps_rel=1e-05
 		self.ctrl = np.zeros(self.m.nu)
 
-	def update(self, x0, u0, xr, dt):
-		# Pass xr = goal
+	def update(self, x0, u0, xr, trajMode=GIVEN_POINT_OR_TRAJ):
+		'''trajMode should be one of the constants in the group up top.
+		'''
 
-		# - linear objective
-		q = np.hstack([np.kron(np.ones(self.N), -self.Q.dot(xr)), -self.QN.dot(xr), np.zeros(self.N*self.m.nu)])
-		
-		# -- Updating A --
-		
-		for ti in range(self.N):
+		if trajMode == self.GIVEN_POINT_OR_TRAJ:
 			if len(x0.shape) > 1:
-				# a whole trajectory has been provided
-				Ad, Bd = self.m.getLinearDynamics(x0[ti,:], u0[ti,:])
-			elif ti == 0:
+		
+				for ti in range(self.N):
+					# a whole trajectory has been provided
+					# FIXME: get*
+					Ad, Bd = self.m.getLinearDynamics(x0[ti,:], u0[ti,:])
+					cscUpdateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
+
+				# Update the initial state
+				self.l[:self.m.nx] = -x0[0,:]
+				self.u[:self.m.nx] = -x0[0,:]
+					
+				# TODO: q for a traj
+				q = np.hstack([np.kron(np.ones(self.N), -self.Q.dot(xr)), -self.QN.dot(xr), np.zeros(self.N*self.m.nu)])
+			else:
 				# only the current state provided; only need to call once
 				Ad, Bd = self.m.getLinearDynamics(x0, u0)
-			# Update the LTV dynamics
-			cscUpdateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
-		# Update initial state
-		if len(x0.shape) > 1:
-			self.l[:self.m.nx] = -x0[0,:]
-			self.u[:self.m.nx] = -x0[0,:]
+				# Update the LTV dynamics
+				for ti in range(self.N):
+					cscUpdateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
+
+				# Update the initial state
+				self.l[:self.m.nx] = -x0
+				self.u[:self.m.nx] = -x0
+
+				# Single point goal goes in cost
+				q = np.hstack([np.kron(np.ones(self.N), -self.Q.dot(xr)), -self.QN.dot(xr), np.zeros(self.N*self.m.nu)])
+
 		else:
-			self.l[:self.m.nx] = -x0
-			self.u[:self.m.nx] = -x0
+			raise 'Not implemented'
+			
+		# Update
 		self.prob.update(l=self.l, u=self.u, q=q, Ax=self.A.data)
 		# print(A.data.shape)
 

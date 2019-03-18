@@ -13,6 +13,10 @@ def rot2(theta):
 		[np.sin(theta), np.cos(theta)]
 	])
 
+def rot2lin(phiz):
+	'''Linearization of rotation (small angle)'''
+	return np.eye(2) + phiz * np.array([[0, -1], [1, 0]])
+
 def screw(twistdt):
 	# Assuming SE(2)
 	twistHat = np.vstack((

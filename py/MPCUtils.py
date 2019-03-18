@@ -30,7 +30,8 @@ class LTVMPC:
 	# If a single goal point is given, use dynamics at that, or if a trajectory is given
 	# use the linearization at each knot point
 	GIVEN_POINT_OR_TRAJ = 0
-	SQP = 1  # sequential QP
+	ITERATE_TRAJ = 1
+	SQP = 2  # sequential QP
 
 	def __init__(self, model, N, wx, wu, **settings):
 		# Pass in model, N=prediction horizon
@@ -79,37 +80,28 @@ class LTVMPC:
 		'''trajMode should be one of the constants in the group up top.
 		'''
 
-		if trajMode == self.GIVEN_POINT_OR_TRAJ:
-			if len(x0.shape) > 1:
-		
-				for ti in range(self.N):
-					# a whole trajectory has been provided
-					# FIXME: get*
-					Ad, Bd = self.m.getLinearDynamics(x0[ti,:], u0[ti,:])
-					cscUpdateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
+		# Update the initial state
+		xinit = x0[0,:] if len(x0.shape) > 1 else x0
+		uinit = u0[0,:] if len(u0.shape) > 1 else u0
+		self.l[:self.m.nx] = -xinit
+		self.u[:self.m.nx] = -xinit
+			
+		for ti in range(self.N):
+			if trajMode == self.GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1:
+				xinit = x0[i, :]
+				uinit = u0[i, :]
+			
+			Ad, Bd = self.m.getLinearDynamics(xinit, uinit)
+			cscUpdateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
 
-				# Update the initial state
-				self.l[:self.m.nx] = -x0[0,:]
-				self.u[:self.m.nx] = -x0[0,:]
-					
-				# TODO: q for a traj
-				q = np.hstack([np.kron(np.ones(self.N), -self.Q.dot(xr)), -self.QN.dot(xr), np.zeros(self.N*self.m.nu)])
-			else:
-				# only the current state provided; only need to call once
-				Ad, Bd = self.m.getLinearDynamics(x0, u0)
-				# Update the LTV dynamics
-				for ti in range(self.N):
-					cscUpdateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
-
-				# Update the initial state
-				self.l[:self.m.nx] = -x0
-				self.u[:self.m.nx] = -x0
-
-				# Single point goal goes in cost
-				q = np.hstack([np.kron(np.ones(self.N), -self.Q.dot(xr)), -self.QN.dot(xr), np.zeros(self.N*self.m.nu)])
-
-		else:
-			raise 'Not implemented'
+			if trajMode == self.ITERATE_TRAJ:
+				# update using these linearized dynamics
+				xinit = Ad @ xinit + Bd @ uinit
+			elif trajMode == self.SQP:
+				raise 'Not implemented'
+			
+		# Single point goal goes in cost
+		q = np.hstack([np.kron(np.ones(self.N), -self.Q.dot(xr)), -self.QN.dot(xr), np.zeros(self.N*self.m.nu)])
 			
 		# Update
 		self.prob.update(l=self.l, u=self.u, q=q, Ax=self.A.data)

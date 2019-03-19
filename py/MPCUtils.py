@@ -22,16 +22,18 @@ After solving, apply u1 (MPC)
 class LTVMPC:
 	'''Interface that the provided "model" must provide:
 	- getLinearDynamics(y, u)
-	- getReference(y, u) - either returns a single goal point, or N points
-	- TBD nonlinear dynamics update
+	- dynamics(y, u) - if ITERATE_TRAJ_NONLIN is selected
 	'''
 
-	# What to use over the horizon during the update for 
+	# What to use over the horizon during the MPC update ---
 	# If a single goal point is given, use dynamics at that, or if a trajectory is given
 	# use the linearization at each knot point
 	GIVEN_POINT_OR_TRAJ = 0
-	ITERATE_TRAJ = 1
-	SQP = 2  # sequential QP
+	ITERATE_TRAJ_LIN = 1
+	ITERATE_TRAJ_NONLIN = 2
+	# sequential QP: take the first solution, get a traj, and then linearize around that and rinse repeat (before actually taking a control action in the sim)
+	SQP = 3
+	# --
 
 	def __init__(self, model, N, wx, wu, **settings):
 		# Pass in model, N=prediction horizon
@@ -99,9 +101,9 @@ class LTVMPC:
 			Ad, Bd = self.m.getLinearDynamics(xinit, uinit)
 			cscUpdateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
 
-			if trajMode == self.ITERATE_TRAJ:
-				# update using these linearized dynamics
-				xinit = Ad @ xinit + Bd @ uinit
+			if trajMode == self.ITERATE_TRAJ_LIN or trajMode == self.ITERATE_TRAJ_NONLIN:
+				# update the point at which the next linearization will happen
+				xinit = Ad @ xinit + Bd @ uinit if trajMode == self.ITERATE_TRAJ_LIN else self.m.dynamics(xinit, uinit)
 				# cost along each point
 				q[self.m.nx * ti:self.m.nx * (ti + 1)] = -self.Q @ xinit
 			elif trajMode == self.SQP:

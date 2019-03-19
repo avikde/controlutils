@@ -56,7 +56,6 @@ class LTVMPC:
 		# - quadratic objective
 		P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN, sparse.kron(sparse.eye(N), R)]).tocsc()
 		# - input and state constraints
-		Aineq = sparse.eye((N+1)*self.m.nx + N*self.m.nu)
 		lineq = np.hstack([np.kron(np.ones(N+1), xmin), np.kron(np.ones(N), umin)])
 		uineq = np.hstack([np.kron(np.ones(N+1), xmax), np.kron(np.ones(N), umax)])
 
@@ -77,6 +76,32 @@ class LTVMPC:
 		# Setup workspace
 		self.prob.setup(P, q, self.A, self.l, self.u, warm_start=True, **settings)#, eps_abs=1e-05, eps_rel=1e-05
 		self.ctrl = np.zeros(self.m.nu)
+
+	def debugResult(self, res):
+		# Debugging infeasible
+		if res.info.status == 'primal infeasible':
+			# NOTE: when infeasible, OSQP appears to return a np.ndarray vector in res.x, but each element is "None"
+			v = res.prim_inf_cert
+			# Try to figure out which constraints are being violated
+			PRIM_INFEAS_VIOL_THRESH = 1e-2
+			v[np.abs(v) < PRIM_INFEAS_VIOL_THRESH] = 0
+			print('Constraints corresponding to infeasibility:')
+			numxdyn = (self.N + 1) * self.m.nx
+			numxcon = numxdyn + (self.N + 1) * self.m.nx
+			for iviol in np.flatnonzero(v):
+				if iviol < numxdyn:
+					print('Dynamics ti=', int(iviol/self.m.mx))
+				elif iviol < numxcon:
+					print('Constraint x', int((iviol - numxdyn)/self.m.mx), ',', (iviol - numxdyn) % self.m.nx)
+				else:
+
+					print('Constraint u', int((iviol - numxcon)/self.m.nu), ',', (iviol - numxcon) % self.m.nu)
+		# print(res.x.shape)
+		# # print((Ax - self.l)[-self.N*self.m.nu:-(self.N-1)*self.m.nu])
+		# # print((self.u - Ax)[-self.N*self.m.nu:-(self.N-1)*self.m.nu])
+		# print(np.min(Ax - self.l))
+		# print(np.min(self.u - Ax))
+		# print("HELLO")
 
 	def update(self, x0, u0, xr, trajMode=GIVEN_POINT_OR_TRAJ):
 		'''trajMode should be one of the constants in the group up top.
@@ -119,19 +144,15 @@ class LTVMPC:
 
 		# Check solver status
 		if res.info.status != 'solved':
-			raise ValueError('OSQP did not solve the problem!')
+			print('Current y,u:', x0, u0)
+			self.debugResult(res)
+			raise ValueError(res.info.status)
 
 		# Apply first control input to the plant
 		self.ctrl = res.x[-self.N*self.m.nu:-(self.N-1)*self.m.nu]
 
 		# if self.ctrl[0] < -1e-6:
 
-		# 	# FIXME: u seems out of bounds
-		# 	Ax = self.A @ res.x
-		# 	print((Ax - self.l)[-self.N*self.m.nu:-(self.N-1)*self.m.nu])
-		# 	print((self.u - Ax)[-self.N*self.m.nu:-(self.N-1)*self.m.nu])
-		# 	print("HELLO")
-		# 	sys.exit(0)
 
 		return self.ctrl
 

@@ -90,9 +90,9 @@ class LTVMPC:
 			numxcon = numxdyn + (self.N + 1) * self.m.nx
 			for iviol in np.flatnonzero(v):
 				if iviol < numxdyn:
-					print('Dynamics ti=', int(iviol/self.m.mx))
+					print('Dynamics ti=', int(iviol/self.m.nx))
 				elif iviol < numxcon:
-					print('Constraint x', int((iviol - numxdyn)/self.m.mx), ',', (iviol - numxdyn) % self.m.nx)
+					print('Constraint x', int((iviol - numxdyn)/self.m.nx), ',', (iviol - numxdyn) % self.m.nx)
 				else:
 
 					print('Constraint u', int((iviol - numxcon)/self.m.nu), ',', (iviol - numxcon) % self.m.nu)

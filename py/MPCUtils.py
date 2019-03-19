@@ -85,11 +85,16 @@ class LTVMPC:
 		uinit = u0[0,:] if len(u0.shape) > 1 else u0
 		self.l[:self.m.nx] = -xinit
 		self.u[:self.m.nx] = -xinit
+		
+		# Single point goal goes in cost (replaced below)
+		q = np.hstack([np.kron(np.ones(self.N), -self.Q.dot(xr)), -self.QN.dot(xr), np.zeros(self.N*self.m.nu)])
 			
 		for ti in range(self.N):
 			if trajMode == self.GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1:
 				xinit = x0[i, :]
 				uinit = u0[i, :]
+				# cost along each point
+				q[self.m.nx * ti:self.m.nx * (ti + 1)] = -self.Q @ xinit
 			
 			Ad, Bd = self.m.getLinearDynamics(xinit, uinit)
 			cscUpdateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
@@ -97,11 +102,11 @@ class LTVMPC:
 			if trajMode == self.ITERATE_TRAJ:
 				# update using these linearized dynamics
 				xinit = Ad @ xinit + Bd @ uinit
+				# cost along each point
+				q[self.m.nx * ti:self.m.nx * (ti + 1)] = -self.Q @ xinit
 			elif trajMode == self.SQP:
 				raise 'Not implemented'
 			
-		# Single point goal goes in cost
-		q = np.hstack([np.kron(np.ones(self.N), -self.Q.dot(xr)), -self.QN.dot(xr), np.zeros(self.N*self.m.nu)])
 			
 		# Update
 		self.prob.update(l=self.l, u=self.u, q=q, Ax=self.A.data)

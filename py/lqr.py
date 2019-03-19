@@ -1,7 +1,7 @@
 '''
 Credits: http://www.kostasalexis.com/lqr-control.html
 Minor modifications made
-''''
+'''
 
 from __future__ import division, print_function
  

@@ -5,8 +5,7 @@ def rectangle(xy, ang, width, height):
 	'''draw a planar rectangle using matplotlib but based on the center
 	'''
 	from matplotlib.patches import Polygon
-	# First argument is lower left (i.e. smallest x,y components), not center
-	lowerLeftCorner = np.full(2, np.inf)
+	
 	Ryaw = geom.rot2(ang)
 
 	# corners in body frame
@@ -21,6 +20,6 @@ def rectangle(xy, ang, width, height):
 	corners = np.zeros_like(di)
 	for i in range(4):
 		corners[i,:] = xy + Ryaw @ di[i,:]
-		
+
 	return Polygon(corners)
 

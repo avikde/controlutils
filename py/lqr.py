@@ -1,6 +1,6 @@
 '''
-Credits: http://www.kostasalexis.com/lqr-control.html
-Minor modifications made
+Original credits: http://www.kostasalexis.com/lqr-control.html
+Modifications by Avik De
 '''
 
 from __future__ import division, print_function
@@ -18,13 +18,13 @@ def lqr(A,B,Q,R, eigs=False):
 	#ref Bertsekas, p.151
 
 	#first, try to solve the ricatti equation
-	X = np.matrix(scipy.linalg.solve_continuous_are(A, B, Q, R))
+	X = scipy.linalg.solve_continuous_are(A, B, Q, R)
 		
 	#compute the LQR gain
-	K = np.matrix(scipy.linalg.inv(R)*(B.T*X))
+	K = np.linalg.inv(R) @ (B.T @ X)
 	
 	if eigs:
-		eigVals, eigVecs = scipy.linalg.eig(A-B*K)
+		eigVals, eigVecs = np.linalg.eig(A - B @ K)
 		return K, X, eigVals
 	else:
 		return K, X
@@ -40,13 +40,13 @@ def dlqr(A,B,Q,R, eigs=False):
 	#ref Bertsekas, p.151
 
 	#first, try to solve the ricatti equation
-	X = np.matrix(scipy.linalg.solve_discrete_are(A, B, Q, R))
+	X = scipy.linalg.solve_discrete_are(A, B, Q, R)
 		
 	#compute the LQR gain
-	K = np.matrix(scipy.linalg.inv(B.T*X*B+R)*(B.T*X*A))
+	K = np.linalg.inv(B.T @ X @ B + R) @ (B.T @ X @ A)
 	
 	if eigs:
-		eigVals, eigVecs = scipy.linalg.eig(A-B*K)
+		eigVals, eigVecs = np.linalg.eig(A - B @ K)
 		return K, X, eigVals
 	else:
 		return K, X

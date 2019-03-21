@@ -31,8 +31,9 @@ class LTVMPC:
 	GIVEN_POINT_OR_TRAJ = 0
 	ITERATE_TRAJ_LIN = 1
 	ITERATE_TRAJ_NONLIN = 2
+	SAME_LIN_OVER_HORIZON = 3
 	# sequential QP: take the first solution, get a traj, and then linearize around that and rinse repeat (before actually taking a control action in the sim)
-	SQP = 3
+	SQP = 4
 	# --
 
 	def __init__(self, model, N, wx, wu, **settings):
@@ -103,7 +104,7 @@ class LTVMPC:
 		# print(np.min(self.u - Ax))
 		# print("HELLO")
 
-	def update(self, x0, u0, xr, trajMode=GIVEN_POINT_OR_TRAJ):
+	def update(self, x0, u0, xr, trajMode=SAME_LIN_OVER_HORIZON):
 		'''trajMode should be one of the constants in the group up top.
 		'''
 
@@ -115,6 +116,11 @@ class LTVMPC:
 		
 		# Single point goal goes in cost (replaced below)
 		q = np.hstack([np.kron(np.ones(self.N), -self.Q.dot(xr)), -self.QN.dot(xr), np.zeros(self.N*self.m.nu)])
+		
+		# First dynamics
+		dyn = self.m.getLinearDynamics(xinit, uinit)
+		Ad, Bd = dyn[0:2]
+		bAffine = len(dyn) > 2
 			
 		for ti in range(self.N):
 			if trajMode == self.GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1:
@@ -123,8 +129,11 @@ class LTVMPC:
 				# cost along each point
 				q[self.m.nx * ti:self.m.nx * (ti + 1)] = -self.Q @ xinit
 			
-			Ad, Bd = self.m.getLinearDynamics(xinit, uinit)
 			cscUpdateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
+			if bAffine and ti > 0:
+				fd = dyn[2]
+				self.l[self.m.nx * ti : self.m.nx * (ti+1)] = -fd
+				self.u[self.m.nx * ti : self.m.nx * (ti+1)] = -fd
 
 			if trajMode == self.ITERATE_TRAJ_LIN or trajMode == self.ITERATE_TRAJ_NONLIN:
 				# update the point at which the next linearization will happen

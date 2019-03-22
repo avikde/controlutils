@@ -123,7 +123,7 @@ class LTVMPC:
 			# diagonal elements of P
 			self.P.data[:(self.N + 1)*self.m.nx] = np.tile(wx, self.N + 1)
 		if wu is not None:
-			self.P.data[-self.N*self.m.nu:] = np.hstack((np.full(self.m.nu, kdamping) + np.array(wu), np.tile(wu, self.N - 1)))
+			self.P.data[-self.N*self.m.nu:] = np.hstack((np.full(self.m.nu, self.kdamping) + np.array(wu), np.tile(wu, self.N - 1)))
 
 	def update(self, x0, u0, xr, wx=None, wu=None, trajMode=GIVEN_POINT_OR_TRAJ, costMode=TRAJ):
 		'''trajMode should be one of the constants in the group up top.

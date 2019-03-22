@@ -152,12 +152,12 @@ class LTVMPC:
 				Ad, Bd = dyn[0:2]
 			
 			# Place new Ad, Bd in Aeq
+			# NOTE: at ti=0, this updates the block equation for x1 = Ad x0 + Bd u0 [+ fd]
 			cscUpdateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
 			# Update RHS of constraint
-			if bAffine and ti > 0:
-				fd = dyn[2]
-				self.l[self.m.nx * ti : self.m.nx * (ti+1)] = -fd
-				self.u[self.m.nx * ti : self.m.nx * (ti+1)] = -fd
+			fd = dyn[2] if bAffine else np.zeros(self.m.nx)
+			self.l[self.m.nx * (ti+1) : self.m.nx * (ti+2)] = -fd
+			self.u[self.m.nx * (ti+1) : self.m.nx * (ti+2)] = -fd
 			# /dynamics update --
 
 			# Objective update in q --
@@ -308,6 +308,8 @@ def cscUpdateElem(obj, i, j, val):
 
 def cscUpdateDynamics(obj, N, ti, Ad=None, Bd=None):
 	# pass a block to update, and a matrix to go in that block, and it will return a tuple (data, indices) of the same length that can go in to update a sparse matrix
+
+	assert(ti < N)
 	
 	if Ad is not None:
 		nx = Ad.shape[0]

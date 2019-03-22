@@ -62,13 +62,13 @@ class LTVMPC:
 
 		# Cast MPC problem to a QP: x = (x(0),x(1),...,x(N),u(0),...,u(N-1))
 		# - quadratic objective
-		P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN, R + sparse.eye(self.m.nu) * kdamping, sparse.kron(sparse.eye(N - 1), R)]).tocsc()
+		self.P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN, R + sparse.eye(self.m.nu) * kdamping, sparse.kron(sparse.eye(N - 1), R)]).tocsc()
 		# After eliminating zero elements, since P is diagonal, the sparse format is particularly simple. If P is np x np, ...
-		P.eliminate_zeros()
-		szP = P.shape[0]
+		self.P.eliminate_zeros()
+		szP = self.P.shape[0]
 		# the data array just corresponds to the diagonal elements
-		assert((P.indices == range(szP)).all())
-		assert((P.indptr == range(szP + 1)).all())
+		assert((self.P.indices == range(szP)).all())
+		assert((self.P.indptr == range(szP + 1)).all())
 		# print(P.toarray(), P.data)
 		# - input and state constraints
 		lineq = np.hstack([np.kron(np.ones(N+1), xmin), np.kron(np.ones(N), umin)])
@@ -89,7 +89,7 @@ class LTVMPC:
 		
 		# Full so that it is not made sparse. prob.update() cannot change the sparsity structure
 		# Setup workspace
-		self.prob.setup(P, q, self.A, self.l, self.u, warm_start=True, **settings)#, eps_abs=1e-05, eps_rel=1e-05
+		self.prob.setup(self.P, q, self.A, self.l, self.u, warm_start=True, **settings)#, eps_abs=1e-05, eps_rel=1e-05
 		self.ctrl = np.zeros(self.m.nu)
 
 	def debugResult(self, res):
@@ -118,7 +118,14 @@ class LTVMPC:
 		# print(np.min(self.u - Ax))
 		# print("HELLO")
 
-	def update(self, x0, u0, xr, trajMode=GIVEN_POINT_OR_TRAJ, costMode=TRAJ):
+	def updateWeights(self, wx=None, wu=None):
+		if wx is not None:
+			# diagonal elements of P
+			self.P.data[:(self.N + 1)*self.m.nx] = np.tile(wx, self.N + 1)
+		if wu is not None:
+			self.P.data[-self.N*self.m.nu:] = np.hstack((np.full(self.m.nu, kdamping) + np.array(wu), np.tile(wu, self.N - 1)))
+
+	def update(self, x0, u0, xr, wx=None, wu=None, trajMode=GIVEN_POINT_OR_TRAJ, costMode=TRAJ):
 		'''trajMode should be one of the constants in the group up top.
 		'''
 		
@@ -128,6 +135,8 @@ class LTVMPC:
 		# If there is no trajectory, then the cost can only take the final point
 		if trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) == 1 and costMode == TRAJ:
 			costMode = FINAL
+
+		self.updateWeights(wx, wu)  # they can be none
 
 		# Update the initial state
 		xlin = x0[0,:] if len(x0.shape) > 1 else x0
@@ -178,7 +187,7 @@ class LTVMPC:
 		q[-self.N*self.m.nu:-(self.N-1)*self.m.nu] = -self.kdamping * self.ctrl
 			
 		# Update
-		self.prob.update(l=self.l, u=self.u, q=q, Ax=self.A.data)
+		self.prob.update(l=self.l, u=self.u, q=q, Ax=self.A.data, Px=self.P.data)
 		# print(A.data.shape)
 
 		# Solve

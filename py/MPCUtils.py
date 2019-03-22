@@ -110,6 +110,13 @@ class LTVMPC:
 	def update(self, x0, u0, xr, trajMode=GIVEN_POINT_OR_TRAJ, costMode=TRAJ):
 		'''trajMode should be one of the constants in the group up top.
 		'''
+		
+		if trajMode == self.SQP:
+			raise 'Not implemented'
+		
+		# If there is no trajectory, then the cost can only take the final point
+		if trajMode == self.GIVEN_POINT_OR_TRAJ and len(x0.shape) == 1 and costMode == self.TRAJ:
+			costMode = self.FINAL
 
 		# Update the initial state
 		xlin = x0[0,:] if len(x0.shape) > 1 else x0
@@ -124,13 +131,6 @@ class LTVMPC:
 		dyn = self.m.getLinearDynamics(xlin, ulin)
 		Ad, Bd = dyn[0:2]
 		bAffine = len(dyn) > 2
-		
-		if trajMode == self.SQP:
-			raise 'Not implemented'
-		
-		# If there is no trajectory, then the cost can only take the final point
-		if trajMode == self.GIVEN_POINT_OR_TRAJ and len(x0.shape) == 1 and costMode == self.TRAJ:
-			costMode = self.FINAL
 			
 		for ti in range(self.N):
 			# Dynamics update in the equality constraint (also set xlin) --
@@ -138,8 +138,12 @@ class LTVMPC:
 			if trajMode == self.GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1:
 				xlin = x0[i, :]
 				ulin = u0[i, :]
+			# Get linearization point by iterating a provided input
+			elif trajMode in [self.ITERATE_TRAJ] and ti > 0:
+				# update the point at which the next linearization will happen
+				xlin = self.m.dynamics(xlin, ulin)
 				
-			if (trajMode == self.GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [self.ITERATE_TRAJ]:
+			if ti > 0 and (trajMode == self.GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [self.ITERATE_TRAJ]:
 				# if a trajectory is provided or projected, need to get the newest linearization
 				dyn = self.m.getLinearDynamics(xlin, ulin)
 				Ad, Bd = dyn[0:2]
@@ -153,11 +157,6 @@ class LTVMPC:
 				fd = 0  # not affine
 			self.l[self.m.nx * ti : self.m.nx * (ti+1)] = -fd
 			self.u[self.m.nx * ti : self.m.nx * (ti+1)] = -fd
-
-			# Get linearization point by iterating a provided input
-			if trajMode in [self.ITERATE_TRAJ]:
-				# update the point at which the next linearization will happen
-				xlin = self.m.dynamics(xlin, ulin)
 			# /dynamics update --
 
 			# Objective update in q --

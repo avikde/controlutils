@@ -42,11 +42,12 @@ class LTVMPC:
 	- dynamics(y, u) - if ITERATE_TRAJ is selected
 	'''
 
-	def __init__(self, model, N, wx, wu, **settings):
+	def __init__(self, model, N, wx, wu, kdamping=0, **settings):
 		# Pass in model, N=prediction horizon
 
 		self.m = model
 		self.N = N
+		self.kdamping = kdamping
 
 		# Constraints
 		umin, umax, xmin, xmax = model.getLimits()
@@ -61,7 +62,7 @@ class LTVMPC:
 
 		# Cast MPC problem to a QP: x = (x(0),x(1),...,x(N),u(0),...,u(N-1))
 		# - quadratic objective
-		P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN, sparse.kron(sparse.eye(N), R)]).tocsc()
+		P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN, R + sparse.eye(self.m.nu) * kdamping, sparse.kron(sparse.eye(N - 1), R)]).tocsc()
 		# - input and state constraints
 		lineq = np.hstack([np.kron(np.ones(N+1), xmin), np.kron(np.ones(N), umin)])
 		uineq = np.hstack([np.kron(np.ones(N+1), xmax), np.kron(np.ones(N), umax)])
@@ -72,7 +73,7 @@ class LTVMPC:
 		# make up single goal xr for now - will get updated. NOTE: q is not sparse so we can update all of it
 		xr = np.zeros(self.m.nx)
 		x0 = np.zeros_like(xr)
-		q = np.hstack([np.kron(np.ones(N), -self.Q.dot(xr)), -self.QN.dot(xr), np.zeros(N*self.m.nu)])
+		q = np.hstack([np.kron(np.ones(N), -self.Q.dot(xr)), -self.QN.dot(xr), np.zeros(N*self.m.nu)])  # -uprev * damping goes in the u0 slot
 		# Initial state will get updated
 		leq = np.hstack([-x0, np.zeros(self.N*self.m.nx)])
 		ueq = leq
@@ -166,6 +167,8 @@ class LTVMPC:
 				q[self.m.nx * ti:self.m.nx * (ti + 1)] = -self.Q @ xlin
 			# /objective update
 
+		# add "damping" by penalizing changes from uprev to u0
+		q[-self.N*self.m.nu:-(self.N-1)*self.m.nu] = -self.kdamping * self.ctrl
 			
 		# Update
 		self.prob.update(l=self.l, u=self.u, q=q, Ax=self.A.data)

@@ -153,10 +153,8 @@ class LTVMPC:
 			# Update RHS of constraint
 			if bAffine and ti > 0:
 				fd = dyn[2]
-			else:
-				fd = 0  # not affine
-			self.l[self.m.nx * ti : self.m.nx * (ti+1)] = -fd
-			self.u[self.m.nx * ti : self.m.nx * (ti+1)] = -fd
+				self.l[self.m.nx * ti : self.m.nx * (ti+1)] = -fd
+				self.u[self.m.nx * ti : self.m.nx * (ti+1)] = -fd
 			# /dynamics update --
 
 			# Objective update in q --

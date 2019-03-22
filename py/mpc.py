@@ -63,6 +63,13 @@ class LTVMPC:
 		# Cast MPC problem to a QP: x = (x(0),x(1),...,x(N),u(0),...,u(N-1))
 		# - quadratic objective
 		P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN, R + sparse.eye(self.m.nu) * kdamping, sparse.kron(sparse.eye(N - 1), R)]).tocsc()
+		# After eliminating zero elements, since P is diagonal, the sparse format is particularly simple. If P is np x np, ...
+		P.eliminate_zeros()
+		szP = P.shape[0]
+		# the data array just corresponds to the diagonal elements
+		assert((P.indices == range(szP)).all())
+		assert((P.indptr == range(szP + 1)).all())
+		# print(P.toarray(), P.data)
 		# - input and state constraints
 		lineq = np.hstack([np.kron(np.ones(N+1), xmin), np.kron(np.ones(N), umin)])
 		uineq = np.hstack([np.kron(np.ones(N+1), xmax), np.kron(np.ones(N), umax)])

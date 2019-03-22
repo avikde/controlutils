@@ -19,25 +19,28 @@ After solving, apply u1 (MPC)
 # print(lineq.shape)
 '''
 
+# CONSTANTS ---
+
+# What to use over the horizon during the MPC update ---
+# If a single goal point is given, use dynamics at that, or if a trajectory is given
+# use the linearization at each knot point
+GIVEN_POINT_OR_TRAJ = 0
+# ITERATE_TRAJ_LIN = 1
+ITERATE_TRAJ = 1
+# sequential QP: take the first solution, get a traj, and then linearize around that and rinse repeat (before actually taking a control action in the sim)
+SQP = 4
+
+# Options for costMode
+FINAL = 0
+TRAJ = 1
+# /CONSTANTS --
+
+
 class LTVMPC:
 	'''Interface that the provided "model" must provide:
 	- getLinearDynamics(y, u)
 	- dynamics(y, u) - if ITERATE_TRAJ is selected
 	'''
-
-	# What to use over the horizon during the MPC update ---
-	# If a single goal point is given, use dynamics at that, or if a trajectory is given
-	# use the linearization at each knot point
-	GIVEN_POINT_OR_TRAJ = 0
-	# ITERATE_TRAJ_LIN = 1
-	ITERATE_TRAJ = 1
-	# sequential QP: take the first solution, get a traj, and then linearize around that and rinse repeat (before actually taking a control action in the sim)
-	SQP = 4
-
-	# Options for costMode
-	FINAL = 0
-	TRAJ = 1
-	# --
 
 	def __init__(self, model, N, wx, wu, **settings):
 		# Pass in model, N=prediction horizon
@@ -111,12 +114,12 @@ class LTVMPC:
 		'''trajMode should be one of the constants in the group up top.
 		'''
 		
-		if trajMode == self.SQP:
+		if trajMode == SQP:
 			raise 'Not implemented'
 		
 		# If there is no trajectory, then the cost can only take the final point
-		if trajMode == self.GIVEN_POINT_OR_TRAJ and len(x0.shape) == 1 and costMode == self.TRAJ:
-			costMode = self.FINAL
+		if trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) == 1 and costMode == TRAJ:
+			costMode = FINAL
 
 		# Update the initial state
 		xlin = x0[0,:] if len(x0.shape) > 1 else x0
@@ -135,15 +138,15 @@ class LTVMPC:
 		for ti in range(self.N):
 			# Dynamics update in the equality constraint (also set xlin) --
 			# Get linearization point if it is provided
-			if trajMode == self.GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1:
+			if trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1:
 				xlin = x0[i, :]
 				ulin = u0[i, :]
 			# Get linearization point by iterating a provided input
-			elif trajMode in [self.ITERATE_TRAJ] and ti > 0:
+			elif trajMode in [ITERATE_TRAJ] and ti > 0:
 				# update the point at which the next linearization will happen
 				xlin = self.m.dynamics(xlin, ulin)
 				
-			if ti > 0 and (trajMode == self.GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [self.ITERATE_TRAJ]:
+			if ti > 0 and (trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ITERATE_TRAJ]:
 				# if a trajectory is provided or projected, need to get the newest linearization
 				dyn = self.m.getLinearDynamics(xlin, ulin)
 				Ad, Bd = dyn[0:2]
@@ -158,7 +161,7 @@ class LTVMPC:
 			# /dynamics update --
 
 			# Objective update in q --
-			if costMode == self.TRAJ:
+			if costMode == TRAJ:
 				# cost along each point
 				q[self.m.nx * ti:self.m.nx * (ti + 1)] = -self.Q @ xlin
 			# /objective update

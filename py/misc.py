@@ -1,12 +1,12 @@
 import numpy as np
-from . import geometry as geom
+from . import kinematics as kin
 
 def rectangle(xy, ang, width, height):
 	'''draw a planar rectangle using matplotlib but based on the center
 	'''
 	from matplotlib.patches import Polygon
 	
-	Ryaw = geom.rot2(ang)
+	Ryaw = kin.rot2(ang)
 
 	# corners in body frame
 	di = 0.5 * np.array([

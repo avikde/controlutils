@@ -42,9 +42,14 @@ class LTVMPC:
 	- dynamics(y, u) - if ITERATE_TRAJ is selected
 	'''
 
-	def __init__(self, model, N, wx, wu, kdamping=0, **settings):
-		# Pass in model, N=prediction horizon
-
+	def __init__(self, model, N, wx, wu, kdamping=0, polyBlocks=[], **settings):
+		'''
+		model = model class with dynamics(), getLinearDynamics(), getLimits()
+		N = prediction horizon
+		wx,wu = initial weight on states,inputs (update with updateWeights)
+		kdamping = weight for kdamping * || u - uprev ||^2 term added to objective
+		polyBlocks = blocks of x with polyhedron constraints (vs. the default of Identity)
+		'''
 		self.m = model
 		self.N = N
 		self.kdamping = kdamping
@@ -74,8 +79,8 @@ class LTVMPC:
 		lineq = np.hstack([np.kron(np.ones(N+1), xmin), np.kron(np.ones(N), umin)])
 		uineq = np.hstack([np.kron(np.ones(N+1), xmax), np.kron(np.ones(N), umax)])
 
-		# Create the CSC A matrix manually. 
-		conA = CondensedA(self.m.nx, self.m.nu, N)
+		# Create the CSC A matrix manually.
+		conA = CondensedA(self.m.nx, self.m.nu, N, polyBlocks=polyBlocks)
 		self.A = sparse.csc_matrix((conA.data, conA.indices, conA.indptr))
 		# make up single goal xr for now - will get updated. NOTE: q is not sparse so we can update all of it
 		xr = np.zeros(self.m.nx)
@@ -169,7 +174,6 @@ class LTVMPC:
 				Ad, Bd = dyn[0:2]
 			
 			# Place new Ad, Bd in Aeq
-			# NOTE: at ti=0, this updates the block equation for x1 = Ad x0 + Bd u0 [+ fd]
 			cscUpdateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
 			# Update RHS of constraint
 			fd = dyn[2] if bAffine else np.zeros(self.m.nx)
@@ -221,7 +225,7 @@ Assuming that indices, indptr can't be changed
 
 class CondensedA:
 
-	def __init__(self, nx, nu, N, val = 0):
+	def __init__(self, nx, nu, N, polyBlocks=[], val=0):
 		# Pass in nx=#states, nu=#inputs, and N=prediction horizon
 		self.nx = nx
 		self.nu = nu
@@ -268,7 +272,12 @@ class CondensedA:
 					self.addNZ(j, i, val)
 
 			# The identity in Aineq
-			self.addNZ(j, (self.N + 1) * self.nx + j, 1)
+			if len(polyBlocks) > 0:
+				# we are at column j
+				# self.addNZ(j, (self.N + 1) * self.nx + j, 1)
+				raise NotImplementedError
+			else:
+				self.addNZ(j, (self.N + 1) * self.nx + j, 1)
 
 
 			# offs = self.matrixIdxToOffset(i, j)
@@ -309,8 +318,9 @@ class CondensedA:
 # These work for sparse as well as CondensedA
 
 def cscUpdateElem(obj, i, j, val):
-	# will update an element; do nothing if that entry is zero
-	# works on scipy sparse as well as CondensedA
+	'''Will update an element; do nothing if that entry is zero
+	Works on scipy sparse as well as CondensedA
+	'''
 
 	# indptr has #cols elements, and the entry is the index into data/indices for the first element of that column
 	offs = obj.indptr[j]
@@ -326,7 +336,9 @@ def cscUpdateElem(obj, i, j, val):
 		offs += 1
 
 def cscUpdateDynamics(obj, N, ti, Ad=None, Bd=None):
-	# pass a block to update, and a matrix to go in that block, and it will return a tuple (data, indices) of the same length that can go in to update a sparse matrix
+	'''Pass a block to update, and a matrix to go in that block, and it will update all the elements in that block.
+	At ti=0, this updates the block equation for x1 = Ad x0 + Bd u0 [+ fd].
+	'''
 
 	assert(ti < N)
 	
@@ -351,7 +363,7 @@ if __name__ == "__main__":
 	nu = 2
 	N = 4
 	# create instance
-	conA = CondensedA(nx, nu, N, val=1)
+	conA = CondensedA(nx, nu, N, val=1, polyBlocks=[[4,5],[6,7]])
 	# wider display
 	# np.set_printoptions(edgeitems=30, linewidth=100000)
 	

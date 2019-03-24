@@ -374,7 +374,7 @@ if __name__ == "__main__":
 	Ax = sparse.kron(sparse.eye(N+1),-sparse.eye(nx)) + sparse.kron(sparse.eye(N+1, k=-1), Ad)
 	Bu = sparse.kron(sparse.vstack([sparse.csc_matrix((1, N)), sparse.eye(N)]), Bd)
 	Aeq = sparse.hstack([Ax, Bu])
-	Aineq = sparse.eye((N+1)*nx + N*nu)
+	Aineq = sparse.block_diag((sparse.kron(sparse.eye(N+1), sparse.eye(nx)), sparse.eye(N*nu)))
 	A = sparse.vstack([Aeq, Aineq]).tocsc()
 
 	# Tests ---

@@ -27,23 +27,17 @@ def screw(twistdt):
 	))
 	return scipy.linalg.expm(twistHat)
 
-def twistInt(q0, twistDes, N, dt):
+def applyTwist(q0, twistDes, dt):
 	'''Integrates up the twist. Should work regardless of SE(2) or SE(3)
 	'''
-	# This linear map is the "transition" matrix
-	Screw = screw(twistDes * dt)
-	# Apply recursively
-	qtraj = np.zeros((N, len(q0)))
-	qtraj[0, :] = q0
-	for k in range(1, N):
-		# Homegeneous coords
-		qtraj[k, :] = Screw @ np.hstack((qtraj[k-1, 0:2], 1))
-		# Last element is just yaw
-		qtraj[k, 2] = qtraj[k-1, 2] + twistDes[2] * dt
-	return qtraj
+	# Homogeneous coords
+	qnew = screw(twistDes * dt) @ np.hstack((q0[0:2], 1))
+	# Last element is just yaw
+	qnew[2] = q0[2] + twistDes[2] * dt
+	return qnew
 
 def linearizedKinematics(q, dt):
-	'''Linearized kinematics of applying an SE(n) twist to a pose
+	'''Linearized kinematics of applying an SE(n) twist to a pose. (Linearized version of applyTwist)
 	q = input pose
 	dt = time to apply twist (should be small for accuracy)
 	Returns B s.t.

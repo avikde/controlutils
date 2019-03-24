@@ -3,7 +3,6 @@ Helpful utilities
 '''
 
 import numpy as np
-import scipy
 
 Skew2 = np.array([[0, -1], [1, 0]])
 
@@ -17,23 +16,18 @@ def rot2lin(phiz):
 	'''Linearization of rotation (small angle)'''
 	return np.eye(2) + phiz * Skew2
 
-def screw(twistdt):
-	if len(twistdt) != 3:
-		raise('Only SE(2) implemented')
-	# Assuming SE(2)
-	twistHat = np.vstack((
-		np.hstack((Skew2 * twistdt[2], np.array([[twistdt[0]],[twistdt[1]]]))),
-		np.zeros(3)
-	))
-	return scipy.linalg.expm(twistHat)
-
 def applyTwist(q0, twistDes, dt):
-	'''Integrates up the twist. Should work regardless of SE(2) or SE(3)
+	'''Integrates up the twist. Should work regardless of SE(2) or SE(3).
 	'''
-	# Homogeneous coords
-	qnew = screw(twistDes * dt) @ np.hstack((q0[0:2], 1))
-	# Last element is just yaw
-	qnew[2] = q0[2] + twistDes[2] * dt
+	if len(twistDes) != 3:
+		raise('Only SE(2) implemented')
+	
+	qnew = np.hstack((
+		# Rotate to align twist to body frame
+		q0[0:2] + (rot2(q0[2]) @ twistDes[0:2]) * dt,
+		# Last element is just yaw
+		q0[2] + twistDes[2] * dt
+	))
 	return qnew
 
 def linearizedKinematics(q, dt):

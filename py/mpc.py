@@ -2,6 +2,7 @@ import numpy as np
 import scipy.sparse as sparse # for testing
 import osqp
 import sys
+import csc
 
 '''
 NOTE: Dimensions ---
@@ -84,7 +85,7 @@ class LTVMPC:
 
 		# Create the CSC A matrix manually.
 		# conA = CondensedA(self.m.nx, self.m.nu, N, polyBlocks=polyBlocks)
-		conA = cscInit(self.m.nx, self.m.nu, N, polyBlocks=polyBlocks)
+		conA = csc.init(self.m.nx, self.m.nu, N, polyBlocks=polyBlocks)
 		self.A = sparse.csc_matrix((conA.data, conA.indices, conA.indptr))
 		# make up single goal xr for now - will get updated. NOTE: q is not sparse so we can update all of it
 		xr = np.zeros(self.m.nx)
@@ -227,27 +228,6 @@ A->x must be the data vector
 Assuming that indices, indptr can't be changed
 '''
 
-def cscInit(nx, nu, N, polyBlocks=None):
-	'''Return scipy sparse
-	'''
-	Ad = np.ones((nx, nx))
-	Bd = np.ones((nx, nu))
-	# Ad, Bd = getLin(x0, ctrl, dt)
-	Ax = sparse.kron(sparse.eye(N+1),-sparse.eye(nx)) + sparse.kron(sparse.eye(N+1, k=-1), Ad)
-	Bu = sparse.kron(sparse.vstack([sparse.csc_matrix((1, N)), sparse.eye(N)]), Bd)
-	Aeq = sparse.hstack([Ax, Bu])
-	# Assemble the inequality matrix for each x
-	if polyBlocks is not None:
-		Aineqx = []
-		for polyBlock in polyBlocks:
-			Aineqx.append(np.full((polyBlock, polyBlock), 1))
-		Aineqx = sparse.block_diag(Aineqx)
-	else:
-		Aineqx = np.eye(nx)
-	Aineq = sparse.block_diag((sparse.kron(sparse.eye(N+1), Aineqx), sparse.eye(N*nu)))
-	return sparse.vstack([Aeq, Aineq]).tocsc()
-
-
 class CondensedA:
 
 	def __init__(self, nx, nu, N, polyBlocks=None, val=0):
@@ -353,48 +333,9 @@ class CondensedA:
 	nnz = property(get_nnz, None, None, "Number of nonzero entries")
 	shape = property(get_shape, None, None, "Number of nonzero entries")
 
-# These work for sparse as well as CondensedA
-
-def cscUpdateElem(obj, i, j, val):
-	'''Will update an element; do nothing if that entry is zero
-	Works on scipy sparse as well as CondensedA
-	'''
-
-	# indptr has #cols elements, and the entry is the index into data/indices for the first element of that column
-	offs = obj.indptr[j]
-	# 
-	if j < obj.shape[1] - 1:
-		maxOffsThisCol = obj.indptr[j+1]
-	else:
-		maxOffsThisCol = len(obj.indices)
-	while offs < maxOffsThisCol:
-		if obj.indices[offs] == i:
-			obj.data[offs] = val
-			return
-		offs += 1
-
-def cscUpdateDynamics(obj, N, ti, Ad=None, Bd=None):
-	'''Pass a block to update, and a matrix to go in that block, and it will update all the elements in that block.
-	At ti=0, this updates the block equation for x1 = Ad x0 + Bd u0 [+ fd].
-	'''
-
-	assert(ti < N)
-	
-	if Ad is not None:
-		nx = Ad.shape[0]
-		for i in range(nx):
-			for j in range(nx):
-				cscUpdateElem(obj, nx * (ti + 1) + i, nx * ti + j, Ad[i,j])
-
-	if Bd is not None:
-		nx, nu = Bd.shape
-		for i in range(nx):
-			for j in range(nu):
-				cscUpdateElem(obj, nx * (ti + 1) + i, (N + 1) * nx + nu * ti + j, Bd[i,j])
-		
-
 if __name__ == "__main__":
-	print("Testing CondensedA...")
+	print("Testing csc stuff...")
+	testConA = False
 
 	#
 	nx = 3
@@ -402,21 +343,22 @@ if __name__ == "__main__":
 	N = 4
 	polyBlocks = [1,2]  # should sum to nx; each element is the size of the diagonal block
 	# create instance
-	conA = CondensedA(nx, nu, N, val=1, polyBlocks=polyBlocks)
+	if testConA:
+		conA = CondensedA(nx, nu, N, val=1, polyBlocks=polyBlocks)
 	# wider display
 	np.set_printoptions(edgeitems=30, linewidth=100000, precision=2, threshold=2)
 	
 	# Create dense and then use scipy.sparse
-	A = cscInit(nx, nu, N, polyBlocks=polyBlocks)
+	A = csc.init(nx, nu, N, polyBlocks=polyBlocks)
 
 	# Tests ---
-
-	assert(conA.shape == A.shape)
-	assert(conA.nnz == A.nnz)
-	assert((conA.indptr == A.indptr).all())
-	assert((conA.indices == A.indices).all())
-	# both were filled with ones
-	assert((conA.data == A.data).all())
+	if testConA:
+		assert(conA.shape == A.shape)
+		assert(conA.nnz == A.nnz)
+		assert((conA.indptr == A.indptr).all())
+		assert((conA.indices == A.indices).all())
+		# both were filled with ones
+		assert((conA.data == A.data).all())
 
 	#  Usage: update blocks on a sparse, and a CondensedA, and compare to a newly created sparse
 	Aeq = A[:(N+1)*nx, :]
@@ -428,11 +370,16 @@ if __name__ == "__main__":
 	Aeq = sparse.hstack([Ax, Bu])
 	A2 = sparse.vstack([Aeq, Aineq]).tocsc()
 	for ti in range(N):
-		cscUpdateDynamics(A, N, ti, Ad=Ad2, Bd=Bd2)
-		cscUpdateDynamics(conA, N, ti, Ad=Ad2, Bd=Bd2)
+		csc.updateDynamics(A, N, ti, Ad=Ad2, Bd=Bd2)
+		if polyBlocks is not None:
+			csc.updatePolyBlock(A, N, ti, nx, 1, np.full((2,2), 3 + ti))
+		if testConA:
+			csc.updateDynamics(conA, N, ti, Ad=Ad2, Bd=Bd2)
 	# test update
-	assert((conA.data == A2.data).all())
-	assert((A.data == A2.data).all())
+	if testConA:
+		assert((conA.data == A2.data).all())
+	if polyBlocks is None:
+		assert((A.data == A2.data).all())
 
 	# print(conA.indices)
 	# print(A)

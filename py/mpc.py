@@ -42,13 +42,16 @@ class LTVMPC:
 	- dynamics(y, u) - if ITERATE_TRAJ is selected
 	'''
 
-	def __init__(self, model, N, wx, wu, kdamping=0, polyBlocks=[], **settings):
+	def __init__(self, model, N, wx, wu, kdamping=0, polyBlocks=None, **settings):
 		'''
 		model = model class with dynamics(), getLinearDynamics(), getLimits()
 		N = prediction horizon
 		wx,wu = initial weight on states,inputs (update with updateWeights)
 		kdamping = weight for kdamping * || u - uprev ||^2 term added to objective
-		polyBlocks = blocks of x with polyhedron constraints (vs. the default of Identity)
+		polyBlocks = list of block sizes of x with polyhedron constraints (vs. the default of None means the same thing as ones(nx) which results in Identity). The elements in the list should sum to nx; each element is the size of the diagonal block. e.g. [1, 2] for nx=3 results in
+		100
+		011
+		011
 		'''
 		self.m = model
 		self.N = N
@@ -272,10 +275,15 @@ class CondensedA:
 					self.addNZ(j, i, val)
 
 			# The identity in Aineq
-			if len(polyBlocks) > 0:
+			if len(polyBlocks) > 0 and j < (self.N + 1) * self.nx:
 				# we are at column j
-				# self.addNZ(j, (self.N + 1) * self.nx + j, 1)
-				raise NotImplementedError
+				bj = int(np.floor(j / self.nx)) # block col index - goes from [0,N+1)
+				iWithinX = j - bj * self.nx
+				# for polyBlock in polyBlocks:
+
+				# 	if iWithinX >= polyBlock[0] and iWithinX < polyBlock[1]:
+				# 		# rows
+				self.addNZ(j, (self.N + 1) * self.nx + j, 1)
 			else:
 				self.addNZ(j, (self.N + 1) * self.nx + j, 1)
 
@@ -362,10 +370,11 @@ if __name__ == "__main__":
 	nx = 3
 	nu = 2
 	N = 4
+	polyBlocks = [1, 2]  # should sum to nx; each element is the size of the diagonal block
 	# create instance
-	conA = CondensedA(nx, nu, N, val=1, polyBlocks=[[4,5],[6,7]])
+	conA = CondensedA(nx, nu, N, val=1, polyBlocks=polyBlocks)
 	# wider display
-	# np.set_printoptions(edgeitems=30, linewidth=100000)
+	np.set_printoptions(edgeitems=30, linewidth=100000, precision=2, threshold=2)
 	
 	# Create dense and then use scipy.sparse
 	Ad = np.ones((nx, nx))
@@ -374,7 +383,12 @@ if __name__ == "__main__":
 	Ax = sparse.kron(sparse.eye(N+1),-sparse.eye(nx)) + sparse.kron(sparse.eye(N+1, k=-1), Ad)
 	Bu = sparse.kron(sparse.vstack([sparse.csc_matrix((1, N)), sparse.eye(N)]), Bd)
 	Aeq = sparse.hstack([Ax, Bu])
-	Aineq = sparse.block_diag((sparse.kron(sparse.eye(N+1), sparse.eye(nx)), sparse.eye(N*nu)))
+	# Assemble the inequality matrix for each x
+	Aineqx = []
+	for polyBlock in polyBlocks:
+		Aineqx.append(np.full((polyBlock, polyBlock), 1))
+	Aineqx = sparse.block_diag(Aineqx)
+	Aineq = sparse.block_diag((sparse.kron(sparse.eye(N+1), Aineqx), sparse.eye(N*nu)))
 	A = sparse.vstack([Aeq, Aineq]).tocsc()
 
 	# Tests ---

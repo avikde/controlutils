@@ -83,7 +83,8 @@ class LTVMPC:
 		uineq = np.hstack([np.kron(np.ones(N+1), xmax), np.kron(np.ones(N), umax)])
 
 		# Create the CSC A matrix manually.
-		conA = CondensedA(self.m.nx, self.m.nu, N, polyBlocks=polyBlocks)
+		# conA = CondensedA(self.m.nx, self.m.nu, N, polyBlocks=polyBlocks)
+		conA = cscInit(self.m.nx, self.m.nu, N, polyBlocks=polyBlocks)
 		self.A = sparse.csc_matrix((conA.data, conA.indices, conA.indptr))
 		# make up single goal xr for now - will get updated. NOTE: q is not sparse so we can update all of it
 		xr = np.zeros(self.m.nx)
@@ -226,13 +227,39 @@ A->x must be the data vector
 Assuming that indices, indptr can't be changed
 '''
 
+def cscInit(nx, nu, N, polyBlocks=None):
+	'''Return scipy sparse
+	'''
+	Ad = np.ones((nx, nx))
+	Bd = np.ones((nx, nu))
+	# Ad, Bd = getLin(x0, ctrl, dt)
+	Ax = sparse.kron(sparse.eye(N+1),-sparse.eye(nx)) + sparse.kron(sparse.eye(N+1, k=-1), Ad)
+	Bu = sparse.kron(sparse.vstack([sparse.csc_matrix((1, N)), sparse.eye(N)]), Bd)
+	Aeq = sparse.hstack([Ax, Bu])
+	# Assemble the inequality matrix for each x
+	if polyBlocks is not None:
+		Aineqx = []
+		for polyBlock in polyBlocks:
+			Aineqx.append(np.full((polyBlock, polyBlock), 1))
+		Aineqx = sparse.block_diag(Aineqx)
+	else:
+		Aineqx = np.eye(nx)
+	Aineq = sparse.block_diag((sparse.kron(sparse.eye(N+1), Aineqx), sparse.eye(N*nu)))
+	return sparse.vstack([Aeq, Aineq]).tocsc()
+
+
 class CondensedA:
 
-	def __init__(self, nx, nu, N, polyBlocks=[], val=0):
+	def __init__(self, nx, nu, N, polyBlocks=None, val=0):
 		# Pass in nx=#states, nu=#inputs, and N=prediction horizon
 		self.nx = nx
 		self.nu = nu
 		self.N = N
+		if polyBlocks is not None:
+			if np.sum(polyBlocks) != nx:
+				raise ValueError('Sum of elements of polyBlocks must be = nx')
+			# each element >= 1
+			# all elements integers
 
 		# create the indptr and index arrays for sparse CSC format
 		self.data = np.zeros((self.nnz))
@@ -275,15 +302,18 @@ class CondensedA:
 					self.addNZ(j, i, val)
 
 			# The identity in Aineq
-			if len(polyBlocks) > 0 and j < (self.N + 1) * self.nx:
+			if polyBlocks is not None and j < (self.N + 1) * self.nx:
 				# we are at column j
 				bj = int(np.floor(j / self.nx)) # block col index - goes from [0,N+1)
 				iWithinX = j - bj * self.nx
-				# for polyBlock in polyBlocks:
-
+				i0 = 0
+				raise NotImplementedError
+				for polyBlock in polyBlocks:
+					for ii in range(polyBlock):
+						# self.addNZ(j, i0, 1)
+						i0 += 1
 				# 	if iWithinX >= polyBlock[0] and iWithinX < polyBlock[1]:
 				# 		# rows
-				self.addNZ(j, (self.N + 1) * self.nx + j, 1)
 			else:
 				self.addNZ(j, (self.N + 1) * self.nx + j, 1)
 
@@ -370,26 +400,14 @@ if __name__ == "__main__":
 	nx = 3
 	nu = 2
 	N = 4
-	polyBlocks = [1, 2]  # should sum to nx; each element is the size of the diagonal block
+	polyBlocks = [1,2]  # should sum to nx; each element is the size of the diagonal block
 	# create instance
 	conA = CondensedA(nx, nu, N, val=1, polyBlocks=polyBlocks)
 	# wider display
 	np.set_printoptions(edgeitems=30, linewidth=100000, precision=2, threshold=2)
 	
 	# Create dense and then use scipy.sparse
-	Ad = np.ones((nx, nx))
-	Bd = np.ones((nx, nu))
-	# Ad, Bd = getLin(x0, ctrl, dt)
-	Ax = sparse.kron(sparse.eye(N+1),-sparse.eye(nx)) + sparse.kron(sparse.eye(N+1, k=-1), Ad)
-	Bu = sparse.kron(sparse.vstack([sparse.csc_matrix((1, N)), sparse.eye(N)]), Bd)
-	Aeq = sparse.hstack([Ax, Bu])
-	# Assemble the inequality matrix for each x
-	Aineqx = []
-	for polyBlock in polyBlocks:
-		Aineqx.append(np.full((polyBlock, polyBlock), 1))
-	Aineqx = sparse.block_diag(Aineqx)
-	Aineq = sparse.block_diag((sparse.kron(sparse.eye(N+1), Aineqx), sparse.eye(N*nu)))
-	A = sparse.vstack([Aeq, Aineq]).tocsc()
+	A = cscInit(nx, nu, N, polyBlocks=polyBlocks)
 
 	# Tests ---
 
@@ -401,6 +419,8 @@ if __name__ == "__main__":
 	assert((conA.data == A.data).all())
 
 	#  Usage: update blocks on a sparse, and a CondensedA, and compare to a newly created sparse
+	Aeq = A[:(N+1)*nx, :]
+	Aineq = A[(N+1)*nx:, :]
 	Ad2 = np.full((nx, nx), 123)
 	Bd2 = np.full((nx, nu), -456)
 	Ax = sparse.kron(sparse.eye(N+1),-sparse.eye(nx)) + sparse.kron(sparse.eye(N+1, k=-1), Ad2)

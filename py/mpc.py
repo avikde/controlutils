@@ -57,6 +57,7 @@ class LTVMPC:
 		self.m = model
 		self.N = N
 		self.kdamping = kdamping
+		self.polyBlocks = polyBlocks
 
 		# Constraints
 		umin, umax, xmin, xmax = model.getLimits()
@@ -96,6 +97,12 @@ class LTVMPC:
 		ueq = leq
 		self.l = np.hstack([leq, lineq])
 		self.u = np.hstack([ueq, uineq])
+		if polyBlocks is not None:
+			# Add corresponding RHS elements for polyhedron membership
+			# Only C x <= d type constraints
+			Nctotal = self.A.shape[0] - len(self.l)
+			self.l = np.hstack((self.l, np.full(Nctotal, -np.inf)))
+			self.u = np.hstack((self.u, np.full(Nctotal, np.inf)))
 		
 		# Full so that it is not made sparse. prob.update() cannot change the sparsity structure
 		# Setup workspace
@@ -127,6 +134,12 @@ class LTVMPC:
 		# print(np.min(Ax - self.l))
 		# print(np.min(self.u - Ax))
 		# print("HELLO")
+	
+	def updatePolyhedron(self, ti, pbi, Ci, di):
+		'''Update the polyhedron membership constraint for time i
+		pbi = index into polyBlocks provided during init
+		'''
+		raise NotImplementedError
 
 	def updateWeights(self, wx=None, wu=None):
 		if wx is not None:

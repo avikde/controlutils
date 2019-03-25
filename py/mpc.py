@@ -372,9 +372,11 @@ if __name__ == "__main__":
 	for ti in range(N):
 		csc.updateDynamics(A, N, ti, Ad=Ad2, Bd=Bd2)
 		if polyBlocks is not None:
-			csc.updatePolyBlock(A, N, ti, nx, 1, np.full((2,2), 3 + ti))
+			csc.updatePolyBlock(A, nx, nu, N, ti, polyBlocks, 1, np.full((4,2), 3 + ti))
 		if testConA:
 			csc.updateDynamics(conA, N, ti, Ad=Ad2, Bd=Bd2)
+	# Can update the Nth polyblock
+	csc.updatePolyBlock(A, nx, nu, N, N, polyBlocks, 0, np.full((4,1), 123))
 	# test update
 	if testConA:
 		assert((conA.data == A2.data).all())

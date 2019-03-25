@@ -73,16 +73,35 @@ def updateDynamics(obj, N, ti, Ad=None, Bd=None):
 			for j in range(nu):
 				updateElem(obj, nx * (ti + 1) + i, (N + 1) * nx + nu * ti + j, Bd[i,j])
 	
-def updatePolyBlock(obj, N, ti, nx, xstart, Cdi):
+def updatePolyBlock(obj, nx, nu, N, ti, polyBlocks, pbi, Cdi):
 	'''Updates a block in the lower left (Aineq) with a matrix denoting a polyhedron.
-	xstart can be a scalar (both row and col start same) or tuple
-	Cdi must be a matrix. If updating a 1x1 block, supply np.full((1,1), val)
+	polyBlocks = Provide the same polyBlocks used in csc.init
+	pbi = index into polyBlocks list
+	Cdi = (Nc,Ncx)-shaped matrix to use to replace the existing block
 	'''
-	if isinstance(xstart, list):
-		xstarti, xstartj = xstart[0], xstart[1]
-	else:
-		xstarti = xstartj = xstart
-	# Cdi = np.array(Cdi)
-	for i in range(xstarti, xstarti + Cdi.shape[0]):
-		for j in range(xstartj, xstartj + Cdi.shape[1]):
-			updateElem(obj, (N + 1 + ti) * nx + i, nx * ti + j, Cdi[i-xstarti,j-xstartj])
+	assert(ti <= N)
+	assert(pbi < len(polyBlocks), "index too big for polyBlocks list")
+	NcPerTi = 0
+	NcBeforei = 0
+	# Get information needed about all the constraints
+	for ii in range(len(polyBlocks)):
+		xstart, Nc, Ncx = polyBlocks[ii]
+		NcPerTi += Nc
+		if ii < pbi:
+			NcBeforei += Nc
+		elif ii == pbi:
+			xstartj = xstart
+			Nci = Nc
+			Ncxi = Ncx
+
+	# Lots of error checking
+	assert(Cdi.shape[0] == Nci, "Cdi shape is wrong")
+	assert(Cdi.shape[1] == Ncxi, "Cdi shape is wrong")
+
+	ioffs = 2*(N+1)*nx + N*nu  # stanard Aeq,Aineq size of condensed A before polyBlocks
+	ioffs += ti * NcPerTi + NcBeforei
+	joffs = nx * ti + xstartj
+	
+	for i in range(Nci):
+		for j in range(Ncxi):
+			updateElem(obj, ioffs + i, joffs + j, Cdi[i, j])

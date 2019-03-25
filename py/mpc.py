@@ -52,10 +52,7 @@ class LTVMPC:
 		N = prediction horizon
 		wx,wu = initial weight on states,inputs (update with updateWeights)
 		kdamping = weight for kdamping * || u - uprev ||^2 term added to objective
-		polyBlocks = list of block sizes of x with polyhedron constraints (vs. the default of None means the same thing as ones(nx) which results in Identity). The elements in the list should sum to nx; each element is the size of the diagonal block. e.g. [1, 2] for nx=3 results in
-		100
-		011
-		011
+		polyBlocks: see csc.init for help on specifying polyBlocks
 		'''
 		self.m = model
 		self.N = N
@@ -352,7 +349,7 @@ if __name__ == "__main__":
 	nx = 3
 	nu = 2
 	N = 4
-	polyBlocks = [1,2]  # should sum to nx; each element is the size of the diagonal block
+	polyBlocks = [[0,3,1],[1,4,2]]  # see csc.init for help on specifying polyBlocks
 	# create instance
 	if testConA:
 		conA = CondensedA(nx, nu, N, val=1, polyBlocks=polyBlocks)
@@ -402,6 +399,6 @@ if __name__ == "__main__":
 	# print(conA.shape)
 	# print(conA.indptr.shape)
 	# # cscUpdateDynamics(A, N, 9, Bd=np.full((nx, nu), 123))
-	# print(A.toarray())
+	print(A.toarray())
 
 	print("All passed")

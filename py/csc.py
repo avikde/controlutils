@@ -6,7 +6,11 @@ import scipy.sparse as sparse
 def init(nx, nu, N, polyBlocks=None):
 	'''Return scipy sparse.
 	If polyBlocks is specified, additional polyhedron membership constraints are added at the bottom.
-	The size of these needs to be fixed to maintain the sparsity structure (i.e. Np-sized polyhedron)
+	The size of these needs to be fixed to maintain the sparsity structure (i.e. Nc-sized polyhedron).
+	polyBlocks = [polyBlock1, ...], where
+	polyBlock = [xstart, Nc, Ncx], where
+	Apoly @ x[xstart : xstart+Ncx] <= upoly,
+	with both sides having Nc rows (# constraints)
 	'''
 	Ad = np.ones((nx, nx))
 	Bd = np.ones((nx, nu))
@@ -15,8 +19,19 @@ def init(nx, nu, N, polyBlocks=None):
 	Bu = sparse.kron(sparse.vstack([sparse.csc_matrix((1, N)), sparse.eye(N)]), Bd)
 	Aeq = sparse.hstack([Ax, Bu])
 	Aineq = sparse.block_diag((sparse.kron(sparse.eye(N+1), np.eye(nx)), sparse.eye(N*nu)))
+	A = sparse.vstack([Aeq, Aineq])
 	# Add additional constraints for polyhedra
 	if polyBlocks is not None:
+		Cpolyx = np.zeros((0,nx))  # will stack rows below for each constraint
+		for polyBlock in polyBlocks:
+			# First get the LHS matrix corresponding to a single xk
+			xstart, Nc, Ncx = polyBlock
+			Cconstraint = np.tile(np.hstack([np.zeros(xstart), np.ones(Ncx), np.zeros(nx-(Ncx + xstart))]), (Nc,1))
+			Cpolyx = np.vstack((Cpolyx, Cconstraint))
+		# A = sparse.vstack((A,
+		# 	np.tile( np.hstack([np.zeros(xstart), np.ones(Ncx), np.zeros(nx-(Ncx + xstart))]), (Nc, 1))
+		# ))
+		print(Cpolyx)
 		raise NotImplementedError
 		# Aineqx = []
 		# for polyBlock in polyBlocks:
@@ -24,7 +39,7 @@ def init(nx, nu, N, polyBlocks=None):
 		# Aineqx = sparse.block_diag(Aineqx)
 
 	else:
-		return sparse.vstack([Aeq, Aineq]).tocsc()
+		return A.tocsc()
 
 
 def updateElem(obj, i, j, val):

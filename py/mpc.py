@@ -126,7 +126,6 @@ class LTVMPC:
 				elif iviol < numxcon:
 					print('Constraint x', int((iviol - numxdyn)/self.m.nx), ',', (iviol - numxdyn) % self.m.nx)
 				else:
-
 					print('Constraint u', int((iviol - numxcon)/self.m.nu), ',', (iviol - numxcon) % self.m.nu)
 		# print(res.x.shape)
 		# # print((Ax - self.l)[-self.N*self.m.nu:-(self.N-1)*self.m.nu])
@@ -135,11 +134,17 @@ class LTVMPC:
 		# print(np.min(self.u - Ax))
 		# print("HELLO")
 	
-	def updatePolyhedron(self, ti, pbi, Ci, di):
+	def updatePolyhedronConstraint(self, ti, pbi, Ci, di):
 		'''Update the polyhedron membership constraint for time i
+		The constraint added is Ci projection_pbi( x(ti) ) <= di
 		pbi = index into polyBlocks provided during init
+		To "remove" the constraint, just set di = np.full(*, np.inf)
 		'''
-		raise NotImplementedError
+		# Only C x <= d type constraints, so only change A and u
+		ioffs = csc.updatePolyBlock(self.A, self.m.nx, self.m.nu, self.N, ti, self.polyBlocks, pbi, Ci)
+		# update u, but not l (which stays at -inf)
+		assert(Ci.shape[0] == len(di))
+		self.u[ioffs : ioffs + len(di)] = di
 
 	def updateWeights(self, wx=None, wu=None):
 		if wx is not None:

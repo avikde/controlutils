@@ -59,7 +59,7 @@ def updateDynamics(obj, N, ti, Ad=None, Bd=None):
 	At ti=0, this updates the block equation for x1 = Ad x0 + Bd u0 [+ fd].
 	'''
 
-	assert(ti < N)
+	assert ti < N
 	
 	if Ad is not None:
 		nx = Ad.shape[0]
@@ -79,8 +79,8 @@ def updatePolyBlock(obj, nx, nu, N, ti, polyBlocks, pbi, Cdi):
 	pbi = index into polyBlocks list
 	Cdi = (Nc,Ncx)-shaped matrix to use to replace the existing block
 	'''
-	assert(ti <= N)
-	assert(pbi < len(polyBlocks), "index too big for polyBlocks list")
+	assert ti <= N
+	assert pbi < len(polyBlocks), "index too big for polyBlocks list"
 	NcPerTi = 0
 	NcBeforei = 0
 	# Get information needed about all the constraints
@@ -95,8 +95,8 @@ def updatePolyBlock(obj, nx, nu, N, ti, polyBlocks, pbi, Cdi):
 			Ncxi = Ncx
 
 	# Lots of error checking
-	assert(Cdi.shape[0] == Nci, "Cdi shape is wrong")
-	assert(Cdi.shape[1] == Ncxi, "Cdi shape is wrong")
+	assert Cdi.shape[0] == Nci, "Cdi shape is wrong"
+	assert Cdi.shape[1] == Ncxi, "Cdi shape is wrong"
 
 	ioffs = 2*(N+1)*nx + N*nu  # stanard Aeq,Aineq size of condensed A before polyBlocks
 	ioffs += ti * NcPerTi + NcBeforei
@@ -105,3 +105,5 @@ def updatePolyBlock(obj, nx, nu, N, ti, polyBlocks, pbi, Cdi):
 	for i in range(Nci):
 		for j in range(Ncxi):
 			updateElem(obj, ioffs + i, joffs + j, Cdi[i, j])
+	
+	return ioffs  # to be helpful

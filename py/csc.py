@@ -4,7 +4,9 @@ import scipy.sparse as sparse
 # These work for sparse as well as CondensedA
 
 def init(nx, nu, N, polyBlocks=None):
-	'''Return scipy sparse
+	'''Return scipy sparse.
+	If polyBlocks is specified, additional polyhedron membership constraints are added at the bottom.
+	The size of these needs to be fixed to maintain the sparsity structure (i.e. Np-sized polyhedron)
 	'''
 	Ad = np.ones((nx, nx))
 	Bd = np.ones((nx, nu))
@@ -12,16 +14,17 @@ def init(nx, nu, N, polyBlocks=None):
 	Ax = sparse.kron(sparse.eye(N+1),-sparse.eye(nx)) + sparse.kron(sparse.eye(N+1, k=-1), Ad)
 	Bu = sparse.kron(sparse.vstack([sparse.csc_matrix((1, N)), sparse.eye(N)]), Bd)
 	Aeq = sparse.hstack([Ax, Bu])
-	# Assemble the inequality matrix for each x
+	Aineq = sparse.block_diag((sparse.kron(sparse.eye(N+1), np.eye(nx)), sparse.eye(N*nu)))
+	# Add additional constraints for polyhedra
 	if polyBlocks is not None:
-		Aineqx = []
-		for polyBlock in polyBlocks:
-			Aineqx.append(np.full((polyBlock, polyBlock), 1))
-		Aineqx = sparse.block_diag(Aineqx)
+		raise NotImplementedError
+		# Aineqx = []
+		# for polyBlock in polyBlocks:
+		# 	Aineqx.append(np.full((polyBlock, polyBlock), 1))
+		# Aineqx = sparse.block_diag(Aineqx)
+
 	else:
-		Aineqx = np.eye(nx)
-	Aineq = sparse.block_diag((sparse.kron(sparse.eye(N+1), Aineqx), sparse.eye(N*nu)))
-	return sparse.vstack([Aeq, Aineq]).tocsc()
+		return sparse.vstack([Aeq, Aineq]).tocsc()
 
 
 def updateElem(obj, i, j, val):

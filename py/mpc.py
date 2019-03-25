@@ -2,7 +2,10 @@ import numpy as np
 import scipy.sparse as sparse # for testing
 import osqp
 import sys
-import csc
+try:
+	from . import csc
+except:
+	import csc
 
 '''
 NOTE: Dimensions ---
@@ -179,7 +182,7 @@ class LTVMPC:
 				Ad, Bd = dyn[0:2]
 			
 			# Place new Ad, Bd in Aeq
-			cscUpdateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
+			csc.updateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
 			# Update RHS of constraint
 			fd = dyn[2] if bAffine else np.zeros(self.m.nx)
 			self.l[self.m.nx * (ti+1) : self.m.nx * (ti+2)] = -fd

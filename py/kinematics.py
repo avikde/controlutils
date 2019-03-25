@@ -3,6 +3,7 @@ Helpful utilities
 '''
 
 import numpy as np
+from scipy.spatial.transform import Rotation
 
 Skew2 = np.array([[0, -1], [1, 0]])
 
@@ -36,7 +37,7 @@ def rot(phi):
 	if len(phi) == 1:
 		return rot2(phi[0])
 	else:
-		raise NotImplementedError
+		return Rotation.from_rotvec(phi).as_dcm()
 
 def applyTwist(q0, twistDes, dt):
 	'''Integrates up the twist. Should work regardless of SE(2) or SE(3).

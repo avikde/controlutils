@@ -4,7 +4,13 @@ import scipy.sparse as sparse
 # These work for sparse as well as CondensedA
 
 def init(nx, nu, N, polyBlocks=None):
-	'''Return scipy sparse
+	'''Return scipy sparse.
+	If polyBlocks is specified, additional polyhedron membership constraints are added at the bottom.
+	The size of these needs to be fixed to maintain the sparsity structure (i.e. Nc-sized polyhedron).
+	polyBlocks = [polyBlock1, ...], where
+	polyBlock = [xstart, Nc, Ncx], where
+	Apoly @ x[xstart : xstart+Ncx] <= upoly,
+	with both sides having Nc rows (# constraints)
 	'''
 	Ad = np.ones((nx, nx))
 	Bd = np.ones((nx, nu))
@@ -12,16 +18,22 @@ def init(nx, nu, N, polyBlocks=None):
 	Ax = sparse.kron(sparse.eye(N+1),-sparse.eye(nx)) + sparse.kron(sparse.eye(N+1, k=-1), Ad)
 	Bu = sparse.kron(sparse.vstack([sparse.csc_matrix((1, N)), sparse.eye(N)]), Bd)
 	Aeq = sparse.hstack([Ax, Bu])
-	# Assemble the inequality matrix for each x
+	Aineq = sparse.block_diag((sparse.kron(sparse.eye(N+1), np.eye(nx)), sparse.eye(N*nu)))
+	A = sparse.vstack([Aeq, Aineq])
+	# Add additional constraints for polyhedra
 	if polyBlocks is not None:
-		Aineqx = []
+		Cpolyx = np.zeros((0,nx))  # will stack rows below for each constraint
 		for polyBlock in polyBlocks:
-			Aineqx.append(np.full((polyBlock, polyBlock), 1))
-		Aineqx = sparse.block_diag(Aineqx)
-	else:
-		Aineqx = np.eye(nx)
-	Aineq = sparse.block_diag((sparse.kron(sparse.eye(N+1), Aineqx), sparse.eye(N*nu)))
-	return sparse.vstack([Aeq, Aineq]).tocsc()
+			# First get the LHS matrix corresponding to a single xk
+			xstart, Nc, Ncx = polyBlock
+			Cconstraint = np.tile(np.hstack([np.zeros(xstart), np.ones(Ncx), np.zeros(nx-(Ncx + xstart))]), (Nc,1))
+			Cpolyx = sparse.vstack((Cpolyx, Cconstraint))
+		A = sparse.vstack((A,
+			# left block corresponds to x0,...,xN, right block to u0,...,u(N-1)
+			sparse.hstack((sparse.kron(sparse.eye(N+1), Cpolyx), np.zeros(((N+1)*Cpolyx.shape[0], N*nu))))
+		))
+
+	return A.tocsc()
 
 
 def updateElem(obj, i, j, val):
@@ -47,7 +59,7 @@ def updateDynamics(obj, N, ti, Ad=None, Bd=None):
 	At ti=0, this updates the block equation for x1 = Ad x0 + Bd u0 [+ fd].
 	'''
 
-	assert(ti < N)
+	assert ti < N
 	
 	if Ad is not None:
 		nx = Ad.shape[0]
@@ -61,16 +73,37 @@ def updateDynamics(obj, N, ti, Ad=None, Bd=None):
 			for j in range(nu):
 				updateElem(obj, nx * (ti + 1) + i, (N + 1) * nx + nu * ti + j, Bd[i,j])
 	
-def updatePolyBlock(obj, N, ti, nx, xstart, Cdi):
+def updatePolyBlock(obj, nx, nu, N, ti, polyBlocks, pbi, Cdi):
 	'''Updates a block in the lower left (Aineq) with a matrix denoting a polyhedron.
-	xstart can be a scalar (both row and col start same) or tuple
-	Cdi must be a matrix. If updating a 1x1 block, supply np.full((1,1), val)
+	polyBlocks = Provide the same polyBlocks used in csc.init
+	pbi = index into polyBlocks list
+	Cdi = (Nc,Ncx)-shaped matrix to use to replace the existing block
 	'''
-	if isinstance(xstart, list):
-		xstarti, xstartj = xstart[0], xstart[1]
-	else:
-		xstarti = xstartj = xstart
-	# Cdi = np.array(Cdi)
-	for i in range(xstarti, xstarti + Cdi.shape[0]):
-		for j in range(xstartj, xstartj + Cdi.shape[1]):
-			updateElem(obj, (N + 1 + ti) * nx + i, nx * ti + j, Cdi[i-xstarti,j-xstartj])
+	assert ti <= N
+	assert pbi < len(polyBlocks), "index too big for polyBlocks list"
+	NcPerTi = 0
+	NcBeforei = 0
+	# Get information needed about all the constraints
+	for ii in range(len(polyBlocks)):
+		xstart, Nc, Ncx = polyBlocks[ii]
+		NcPerTi += Nc
+		if ii < pbi:
+			NcBeforei += Nc
+		elif ii == pbi:
+			xstartj = xstart
+			Nci = Nc
+			Ncxi = Ncx
+
+	# Lots of error checking
+	assert Cdi.shape[0] == Nci, "Cdi shape is wrong"
+	assert Cdi.shape[1] == Ncxi, "Cdi shape is wrong"
+
+	ioffs = 2*(N+1)*nx + N*nu  # stanard Aeq,Aineq size of condensed A before polyBlocks
+	ioffs += ti * NcPerTi + NcBeforei
+	joffs = nx * ti + xstartj
+	
+	for i in range(Nci):
+		for j in range(Ncxi):
+			updateElem(obj, ioffs + i, joffs + j, Cdi[i, j])
+	
+	return ioffs  # to be helpful

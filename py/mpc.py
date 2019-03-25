@@ -52,14 +52,12 @@ class LTVMPC:
 		N = prediction horizon
 		wx,wu = initial weight on states,inputs (update with updateWeights)
 		kdamping = weight for kdamping * || u - uprev ||^2 term added to objective
-		polyBlocks = list of block sizes of x with polyhedron constraints (vs. the default of None means the same thing as ones(nx) which results in Identity). The elements in the list should sum to nx; each element is the size of the diagonal block. e.g. [1, 2] for nx=3 results in
-		100
-		011
-		011
+		polyBlocks: see csc.init for help on specifying polyBlocks
 		'''
 		self.m = model
 		self.N = N
 		self.kdamping = kdamping
+		self.polyBlocks = polyBlocks
 
 		# Constraints
 		umin, umax, xmin, xmax = model.getLimits()
@@ -90,14 +88,6 @@ class LTVMPC:
 		# conA = CondensedA(self.m.nx, self.m.nu, N, polyBlocks=polyBlocks)
 		conA = csc.init(self.m.nx, self.m.nu, N, polyBlocks=polyBlocks)
 		self.A = sparse.csc_matrix((conA.data, conA.indices, conA.indptr))
-		if polyBlocks is not None:
-			# put identity in all the poly blocks to reset (act as normal xmin/xmax constraint)
-			for ti in range(N):
-				xstart = 0
-				for pbi in polyBlocks:
-					if pbi > 1:
-						csc.updatePolyBlock(self.A, N, ti, self.m.nx, xstart, np.eye(pbi))
-					xstart += pbi
 		# make up single goal xr for now - will get updated. NOTE: q is not sparse so we can update all of it
 		xr = np.zeros(self.m.nx)
 		x0 = np.zeros_like(xr)
@@ -107,6 +97,12 @@ class LTVMPC:
 		ueq = leq
 		self.l = np.hstack([leq, lineq])
 		self.u = np.hstack([ueq, uineq])
+		if polyBlocks is not None:
+			# Add corresponding RHS elements for polyhedron membership
+			# Only C x <= d type constraints
+			Nctotal = self.A.shape[0] - len(self.l)
+			self.l = np.hstack((self.l, np.full(Nctotal, -np.inf)))
+			self.u = np.hstack((self.u, np.full(Nctotal, np.inf)))
 		
 		# Full so that it is not made sparse. prob.update() cannot change the sparsity structure
 		# Setup workspace
@@ -130,7 +126,6 @@ class LTVMPC:
 				elif iviol < numxcon:
 					print('Constraint x', int((iviol - numxdyn)/self.m.nx), ',', (iviol - numxdyn) % self.m.nx)
 				else:
-
 					print('Constraint u', int((iviol - numxcon)/self.m.nu), ',', (iviol - numxcon) % self.m.nu)
 		# print(res.x.shape)
 		# # print((Ax - self.l)[-self.N*self.m.nu:-(self.N-1)*self.m.nu])
@@ -138,6 +133,18 @@ class LTVMPC:
 		# print(np.min(Ax - self.l))
 		# print(np.min(self.u - Ax))
 		# print("HELLO")
+	
+	def updatePolyhedronConstraint(self, ti, pbi, Ci, di):
+		'''Update the polyhedron membership constraint for time i
+		The constraint added is Ci projection_pbi( x(ti) ) <= di
+		pbi = index into polyBlocks provided during init
+		To "remove" the constraint, just set di = np.full(*, np.inf)
+		'''
+		# Only C x <= d type constraints, so only change A and u
+		ioffs = csc.updatePolyBlock(self.A, self.m.nx, self.m.nu, self.N, ti, self.polyBlocks, pbi, Ci)
+		# update u, but not l (which stays at -inf)
+		assert(Ci.shape[0] == len(di))
+		self.u[ioffs : ioffs + len(di)] = di
 
 	def updateWeights(self, wx=None, wu=None):
 		if wx is not None:
@@ -352,7 +359,7 @@ if __name__ == "__main__":
 	nx = 3
 	nu = 2
 	N = 4
-	polyBlocks = [1,2]  # should sum to nx; each element is the size of the diagonal block
+	polyBlocks = [[0,3,1],[1,4,2]]  # see csc.init for help on specifying polyBlocks
 	# create instance
 	if testConA:
 		conA = CondensedA(nx, nu, N, val=1, polyBlocks=polyBlocks)
@@ -383,9 +390,11 @@ if __name__ == "__main__":
 	for ti in range(N):
 		csc.updateDynamics(A, N, ti, Ad=Ad2, Bd=Bd2)
 		if polyBlocks is not None:
-			csc.updatePolyBlock(A, N, ti, nx, 1, np.full((2,2), 3 + ti))
+			csc.updatePolyBlock(A, nx, nu, N, ti, polyBlocks, 1, np.full((4,2), 3 + ti))
 		if testConA:
 			csc.updateDynamics(conA, N, ti, Ad=Ad2, Bd=Bd2)
+	# Can update the Nth polyblock
+	csc.updatePolyBlock(A, nx, nu, N, N, polyBlocks, 0, np.full((4,1), 123))
 	# test update
 	if testConA:
 		assert((conA.data == A2.data).all())

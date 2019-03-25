@@ -87,14 +87,6 @@ class LTVMPC:
 		# conA = CondensedA(self.m.nx, self.m.nu, N, polyBlocks=polyBlocks)
 		conA = csc.init(self.m.nx, self.m.nu, N, polyBlocks=polyBlocks)
 		self.A = sparse.csc_matrix((conA.data, conA.indices, conA.indptr))
-		if polyBlocks is not None:
-			# put identity in all the poly blocks to reset (act as normal xmin/xmax constraint)
-			for ti in range(N):
-				xstart = 0
-				for pbi in polyBlocks:
-					if pbi > 1:
-						csc.updatePolyBlock(self.A, N, ti, self.m.nx, xstart, np.eye(pbi))
-					xstart += pbi
 		# make up single goal xr for now - will get updated. NOTE: q is not sparse so we can update all of it
 		xr = np.zeros(self.m.nx)
 		x0 = np.zeros_like(xr)

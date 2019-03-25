@@ -399,6 +399,6 @@ if __name__ == "__main__":
 	# print(conA.shape)
 	# print(conA.indptr.shape)
 	# # cscUpdateDynamics(A, N, 9, Bd=np.full((nx, nu), 123))
-	print(A.toarray())
+	# print(A.toarray())
 
 	print("All passed")

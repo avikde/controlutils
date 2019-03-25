@@ -27,19 +27,13 @@ def init(nx, nu, N, polyBlocks=None):
 			# First get the LHS matrix corresponding to a single xk
 			xstart, Nc, Ncx = polyBlock
 			Cconstraint = np.tile(np.hstack([np.zeros(xstart), np.ones(Ncx), np.zeros(nx-(Ncx + xstart))]), (Nc,1))
-			Cpolyx = np.vstack((Cpolyx, Cconstraint))
-		# A = sparse.vstack((A,
-		# 	np.tile( np.hstack([np.zeros(xstart), np.ones(Ncx), np.zeros(nx-(Ncx + xstart))]), (Nc, 1))
-		# ))
-		print(Cpolyx)
-		raise NotImplementedError
-		# Aineqx = []
-		# for polyBlock in polyBlocks:
-		# 	Aineqx.append(np.full((polyBlock, polyBlock), 1))
-		# Aineqx = sparse.block_diag(Aineqx)
+			Cpolyx = sparse.vstack((Cpolyx, Cconstraint))
+		A = sparse.vstack((A,
+			# left block corresponds to x0,...,xN, right block to u0,...,u(N-1)
+			sparse.hstack((sparse.kron(sparse.eye(N+1), Cpolyx), np.zeros(((N+1)*Cpolyx.shape[0], N*nu))))
+		))
 
-	else:
-		return A.tocsc()
+	return A.tocsc()
 
 
 def updateElem(obj, i, j, val):

@@ -7,6 +7,17 @@ from scipy.spatial.transform import Rotation
 
 Skew2 = np.array([[0, -1], [1, 0]])
 
+def skew(a=None):
+	# Skew of a vector
+	if len(a) == 3:
+		return np.array([
+			[0, -a[2], a[1]],
+			[a[2], 0, -a[0]],
+			[-a[1], a[0], 0]
+			])
+	else:
+		return Skew2
+
 def rot2(theta):
 	return np.array([
 		[np.cos(theta), -np.sin(theta)],

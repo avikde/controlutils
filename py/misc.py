@@ -1,7 +1,7 @@
 import numpy as np
 from . import kinematics as kin
 
-def rectangle(xy, ang, width, height):
+def rectangle(xy, ang, width, height, rawxy=False):
 	'''draw a planar rectangle using matplotlib but based on the center
 	'''
 	from matplotlib.patches import Polygon
@@ -21,5 +21,5 @@ def rectangle(xy, ang, width, height):
 	for i in range(4):
 		corners[i,:] = xy + Ryaw @ di[i,:]
 
-	return Polygon(corners)
+	return corners if rawxy else Polygon(corners)
 

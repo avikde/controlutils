@@ -31,6 +31,8 @@ After solving, apply u1 (MPC)
 GIVEN_POINT_OR_TRAJ = 0
 # ITERATE_TRAJ_LIN = 1
 ITERATE_TRAJ = 1
+# Use the x1, ..., xN from the previous run
+PREV_SOL_TRAJ = 2
 # sequential QP: take the first solution, get a traj, and then linearize around that and rinse repeat (before actually taking a control action in the sim)
 SQP = 4
 
@@ -107,7 +109,10 @@ class LTVMPC:
 		# Full so that it is not made sparse. prob.update() cannot change the sparsity structure
 		# Setup workspace
 		self.prob.setup(self.P, q, self.A, self.l, self.u, warm_start=True, **settings)#, eps_abs=1e-05, eps_rel=1e-05
+
+		# Variables to store the previous result in
 		self.ctrl = np.zeros(self.m.nu)
+		self.prevSolTraj = None
 
 	def debugResult(self, res):
 		# Debugging infeasible
@@ -156,7 +161,6 @@ class LTVMPC:
 	def update(self, x0, u0, xr, wx=None, wu=None, trajMode=GIVEN_POINT_OR_TRAJ, costMode=TRAJ):
 		'''trajMode should be one of the constants in the group up top.
 		'''
-		
 		if trajMode == SQP:
 			raise 'Not implemented'
 		
@@ -169,6 +173,7 @@ class LTVMPC:
 		# Update the initial state
 		xlin = x0[0,:] if len(x0.shape) > 1 else x0
 		ulin = u0[0,:] if len(u0.shape) > 1 else u0
+		# FIXME: if a trajectory is provided this would not set the initial condition correctly
 		self.l[:self.m.nx] = -xlin
 		self.u[:self.m.nx] = -xlin
 		
@@ -190,6 +195,8 @@ class LTVMPC:
 			elif trajMode in [ITERATE_TRAJ] and ti > 0:
 				# update the point at which the next linearization will happen
 				xlin = self.m.dynamics(xlin, ulin)
+			elif trajMode == PREV_SOL_TRAJ:
+				raise NotImplementedError
 				
 			if ti > 0 and (trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ITERATE_TRAJ]:
 				# if a trajectory is provided or projected, need to get the newest linearization
@@ -226,8 +233,9 @@ class LTVMPC:
 			self.debugResult(res)
 			raise ValueError(res.info.status)
 
-		# Apply first control input to the plant
+		# Apply first control input to the plant, and store
 		self.ctrl = res.x[-self.N*self.m.nu:-(self.N-1)*self.m.nu]
+		self.prevSolTraj = res.x[:(self.N+1)*self.m.nx]
 
 		# if self.ctrl[0] < -1e-6:
 

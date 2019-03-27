@@ -25,15 +25,10 @@ After solving, apply u1 (MPC)
 
 # CONSTANTS ---
 
-# What to use over the horizon during the MPC update ---
-# If a single goal point is given, use dynamics at that, or if a trajectory is given
-# use the linearization at each knot point
+# What to use over the horizon during the MPC update (see docstring of update) ---
 GIVEN_POINT_OR_TRAJ = 0
-# ITERATE_TRAJ_LIN = 1
 ITERATE_TRAJ = 1
-# Use the x1, ..., xN from the previous run
 PREV_SOL_TRAJ = 2
-# sequential QP: take the first solution, get a traj, and then linearize around that and rinse repeat (before actually taking a control action in the sim)
 SQP = 4
 
 # Options for costMode
@@ -175,16 +170,37 @@ class LTVMPC:
 		return trajMode, costMode
 
 
-	def update(self, x0, u0, xr, wx=None, wu=None, trajMode=GIVEN_POINT_OR_TRAJ, costMode=TRAJ):
+	def update(self, x0, xr, u0=None, trajMode=GIVEN_POINT_OR_TRAJ, costMode=TRAJ):
 		'''trajMode should be one of the constants in the group up top.
+
+		x0 --- either a (nx,) vector (current state) or an (N,nx) array with a given horizon (used with `trajMode=GIVEN_POINT_OR_TRAJ`). NOTE: when a horizon is provided, x0[0,:] must still have the current state.
+
+		xr --- goal state (placed in the linear term of the objective)
+
+		u0 --- input to linearize around (does not matter in a lot of cases if the linearization does not depend on the input).
+
+		trajMode --- 
+
+		`GIVEN_POINT_OR_TRAJ`: if a single goal point is given in x0, use linearization at that point, or if a trajectory is given in x0, use the linearization at each knot point
+
+		`ITERATE_TRAJ`: apply the current or provided input u0 recursively to produce a trajectory. Warning: this can produce bad trajectories for complicated dynamics
+
+		`PREV_SOL_TRAJ`: Use the x1, ..., xN from the previous run
+
+		`SQP` i.e. sequential QP: take the first solution, get a traj, and then linearize around that and rinse repeat (before actually taking a control action in the sim)
+		
+		costMode --- if FINAL, only xr (at the end of the horizon) contributes to the cost. If TRAJ, each point in the provided or constructed trajectory (see trajMode) contributes.
+
+		Returns: the next control input u0
 		'''
 		trajMode, costMode = self._sanitizeTrajAndCostModes(trajMode, costMode, x0)
-		self.updateWeights(wx, wu)  # they can be none
 
+		if u0 is None:
+			u0 = self.ctrl  # use the previous control input
 		# Update the initial state
 		xlin = x0[0,:] if len(x0.shape) > 1 else x0
 		ulin = u0[0,:] if len(u0.shape) > 1 else u0
-		# FIXME: if a trajectory is provided this would not set the initial condition correctly
+		# Assumes that when a trajectory is provided, the first is the initial condition (see docstring)
 		self.l[:self.m.nx] = -xlin
 		self.u[:self.m.nx] = -xlin
 		
@@ -226,7 +242,7 @@ class LTVMPC:
 			# /dynamics update --
 
 			# Objective update in q --
-			if costMode == TRAJ:
+			if costMode == TRAJ and (trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ITERATE_TRAJ, PREV_SOL_TRAJ]:
 				# cost along each point
 				q[self.m.nx * ti:self.m.nx * (ti + 1)] = -self.Q @ xlin
 			# /objective update

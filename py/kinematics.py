@@ -7,7 +7,7 @@ from scipy.spatial.transform import Rotation
 
 Skew2 = np.array([[0, -1], [1, 0]])
 
-def skew(a=None):
+def skew(a=[0,0]):
 	# Skew of a vector
 	if len(a) == 3:
 		return np.array([

@@ -67,6 +67,9 @@ class LTVMPC:
 		self.QN = self.Q
 		R = sparse.diags(wu)
 
+		assert len(wx) == self.m.nx
+		assert len(wu) == self.m.nu
+
 		# Cast MPC problem to a QP: x = (x(0),x(1),...,x(N),u(0),...,u(N-1))
 		# - quadratic objective
 		self.P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN, R + sparse.eye(self.m.nu) * kdamping, sparse.kron(sparse.eye(N - 1), R)]).tocsc()

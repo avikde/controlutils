@@ -112,7 +112,7 @@ class LTVMPC:
 
 		# Variables to store the previous result in
 		self.ctrl = np.zeros(self.m.nu)
-		self.prevSolTraj = None
+		self.prevSol = None
 
 	def debugResult(self, res):
 		# Debugging infeasible
@@ -157,17 +157,28 @@ class LTVMPC:
 			self.P.data[:(self.N + 1)*self.m.nx] = np.tile(wx, self.N + 1)
 		if wu is not None:
 			self.P.data[-self.N*self.m.nu:] = np.hstack((np.full(self.m.nu, self.kdamping) + np.array(wu), np.tile(wu, self.N - 1)))
+	
+	def _sanitizeTrajAndCostModes(self, trajMode, costMode, x0):
+		'''Test if these modes all make sense'''
+
+		if trajMode == SQP:
+			raise 'Not implemented'
+		
+		# if this is the first time, cannot use the previous solution
+		if self.prevSol is None and trajMode == PREV_SOL_TRAJ:
+			trajMode = GIVEN_POINT_OR_TRAJ
+
+		# If there is no trajectory, then the cost can only take the final point
+		if trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) == 1 and costMode == TRAJ:
+			costMode = FINAL
+			
+		return trajMode, costMode
+
 
 	def update(self, x0, u0, xr, wx=None, wu=None, trajMode=GIVEN_POINT_OR_TRAJ, costMode=TRAJ):
 		'''trajMode should be one of the constants in the group up top.
 		'''
-		if trajMode == SQP:
-			raise 'Not implemented'
-		
-		# If there is no trajectory, then the cost can only take the final point
-		if trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) == 1 and costMode == TRAJ:
-			costMode = FINAL
-
+		trajMode, costMode = self._sanitizeTrajAndCostModes(trajMode, costMode, x0)
 		self.updateWeights(wx, wu)  # they can be none
 
 		# Update the initial state
@@ -235,10 +246,7 @@ class LTVMPC:
 
 		# Apply first control input to the plant, and store
 		self.ctrl = res.x[-self.N*self.m.nu:-(self.N-1)*self.m.nu]
-		self.prevSolTraj = res.x[:(self.N+1)*self.m.nx]
-
-		# if self.ctrl[0] < -1e-6:
-
+		self.prevSol = res.x
 
 		return self.ctrl
 

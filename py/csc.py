@@ -79,6 +79,8 @@ def updatePolyBlock(obj, nx, nu, N, ti, polyBlocks, pbi, Cdi):
 	pbi = index into polyBlocks list
 	Cdi = (Nc,Ncx)-shaped matrix to use to replace the existing block
 	'''
+	if polyBlocks is None:
+		return
 	assert ti <= N
 	assert pbi < len(polyBlocks), "index too big for polyBlocks list"
 	NcPerTi = 0

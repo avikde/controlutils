@@ -243,122 +243,6 @@ class LTVMPC:
 		return self.ctrl
 
 
-'''
-These are all for the condensed A matrix
-CSC matrix
-three NumPy arrays: indices, indptr, data
-In OSQP: sparse structure cannot be changed, i.e. can only change data
-Ax_new: Vector of new elements in A->x
-Ax_new_idx: Index mapping new elements to positions in A->x
-A->x must be the data vector
-Assuming that indices, indptr can't be changed
-'''
-
-class CondensedA:
-
-	def __init__(self, nx, nu, N, polyBlocks=None, val=0):
-		# Pass in nx=#states, nu=#inputs, and N=prediction horizon
-		self.nx = nx
-		self.nu = nu
-		self.N = N
-		if polyBlocks is not None:
-			if np.sum(polyBlocks) != nx:
-				raise ValueError('Sum of elements of polyBlocks must be = nx')
-			# each element >= 1
-			# all elements integers
-
-		# create the indptr and index arrays for sparse CSC format
-		self.data = np.zeros((self.nnz))
-		self.indices = np.zeros_like(self.data, dtype=np.int32)
-		numcols = self.shape[1]
-		self.indptr = np.zeros((numcols + 1), dtype=np.int32)
-
-		# NOTE: in the code below, i refers to row index, j to col index
-		# similar for bj for block col index
-		
-		# populate indptr
-		si = 0
-		for j in range(numcols):
-			if j < self.N * self.nx:
-				si += nx + 2
-			elif j < (self.N + 1) * self.nx:
-				si += 2
-			else:
-				si += self.nx + 1
-			self.indptr[j+1] = si
-		
-		# populate row indices
-		self._offs = -1 # internal val to count through the data vector
-		for j in range(self.shape[1]):
-			# In each column, the Aeq blocks come first
-			if j < (self.N + 1) * self.nx:
-				# Leftmost cols
-				bj = int(np.floor(j / self.nx)) # block col index - goes from [0,N+1)
-				# the block diagonal -I
-				self.addNZ(j, j, -1)
-					# The sub-block-diagonal Ad under the -I -- only in the left column block
-				if j < self.N * self.nx:
-					for i in range(self.nx * (bj + 1), self.nx * (bj + 2)):
-						self.addNZ(j, i, val)
-			else:
-				# Right block column
-				bj = int(np.floor((j - (self.N + 1) * self.nx) / self.nu))# block col index for the right - goes from [0,N)
-				# The Bd blocks
-				for i in range(self.nx * (bj + 1), self.nx * (bj + 2)):
-					self.addNZ(j, i, val)
-
-			# The identity in Aineq
-			if polyBlocks is not None and j < (self.N + 1) * self.nx:
-				# we are at column j
-				bj = int(np.floor(j / self.nx)) # block col index - goes from [0,N+1)
-				iWithinX = j - bj * self.nx
-				i0 = 0
-				raise NotImplementedError
-				for polyBlock in polyBlocks:
-					for ii in range(polyBlock):
-						# self.addNZ(j, i0, 1)
-						i0 += 1
-				# 	if iWithinX >= polyBlock[0] and iWithinX < polyBlock[1]:
-				# 		# rows
-			else:
-				self.addNZ(j, (self.N + 1) * self.nx + j, 1)
-
-
-			# offs = self.matrixIdxToOffset(i, j)
-			# if offs >= 0:
-			# 	self.indices[offs] = j
-
-		# sparse structure is now fixed, but data can be updated
-	
-	def addNZ(self, j, i, val):
-		self._offs += 1
-		self.indices[self._offs] = i # row index
-		self.data[self._offs] = val
-
-	# def blockToMatrixIdx(self, ib, jb, i, j):
-	# 	# Return matrix indices from the block index (ib, jb) and element index within the block (i, j)
-	# 	if ib < 2*(N+1):
-	# 		rowi = self.nx * ib + i
-	# 	else:
-	# 		rowi = 2 * (self.N+1) * self.nx + (ib - 2 * (self.N+1)) * self.nu + i
-
-	# 	if jb < (N+1):
-	# 		rowi = self.nx * jb + j
-	# 	else:
-	# 		rowi = (self.N+1) * self.nx + (jb - (self.N+1)) * self.nu + j
-		
-	# 	return rowi, coli
-
-	def get_nnz(self):
-		# For testing
-		return self.N * self.nx * (self.nx + 2) + self.nx * 2 + self.N * self.nu * (self.nx + 1)
-	def get_shape(self):
-		# For testing
-		return (2 * (self.N + 1) * self.nx + self.N * self.nu), (self.N + 1) * self.nx + self.N * self.nu
-
-	nnz = property(get_nnz, None, None, "Number of nonzero entries")
-	shape = property(get_shape, None, None, "Number of nonzero entries")
-
 if __name__ == "__main__":
 	print("Testing csc stuff...")
 	testConA = False
@@ -370,7 +254,7 @@ if __name__ == "__main__":
 	polyBlocks = [[0,3,1],[1,4,2]]  # see csc.init for help on specifying polyBlocks
 	# create instance
 	if testConA:
-		conA = CondensedA(nx, nu, N, val=1, polyBlocks=polyBlocks)
+		conA = csc.CondensedA(nx, nu, N, val=1, polyBlocks=polyBlocks)
 	# wider display
 	np.set_printoptions(edgeitems=30, linewidth=100000, precision=2, threshold=2)
 	
@@ -402,7 +286,7 @@ if __name__ == "__main__":
 		if testConA:
 			csc.updateDynamics(conA, N, ti, Ad=Ad2, Bd=Bd2)
 	# Can update the Nth polyblock
-	csc.updatePolyBlock(A, nx, nu, N, N, polyBlocks, 0, np.full((4,1), 123))
+	csc.updatePolyBlock(A, nx, nu, N, N, polyBlocks, 0, np.full((3,1), 123))
 	# test update
 	if testConA:
 		assert((conA.data == A2.data).all())

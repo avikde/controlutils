@@ -225,7 +225,7 @@ class LTVMPC:
 			elif trajMode == PREV_SOL_TRAJ:
 				# use the previous solution shifted by 1 timestep (till the end)
 				# NOTE: uses the end point twice (probably matters least then anyway)
-				prevSolIdx = self.m.nx * min(ti+1, N)  # index into prevSol
+				prevSolIdx = self.m.nx * min(ti+1, self.N)  # index into prevSol
 				xlin = self.prevSol[prevSolIdx : prevSolIdx + self.m.nx]
 				
 			if ti > 0 and (trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ITERATE_TRAJ, PREV_SOL_TRAJ]:

@@ -208,11 +208,9 @@ class LTVMPC:
 				xlin = self.m.dynamics(xlin, ulin)
 			elif trajMode == PREV_SOL_TRAJ:
 				# use the previous solution shifted by 1 timestep (till the end)
-				if ti < self.N:
-					xlin = self.prevSol[self.m.nx * (ti+1) : self.m.nx * (ti+2)]
-				else:
-					# TODO: figure out what's best for the end (probably matters less?)
-					xlin = self.prevSol[self.m.nx * ti : self.m.nx * (ti+1)]
+				# NOTE: uses the end point twice (probably matters least then anyway)
+				prevSolIdx = self.m.nx * min(ti+1, N)  # index into prevSol
+				xlin = self.prevSol[prevSolIdx : prevSolIdx + self.m.nx]
 				
 			if ti > 0 and (trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ITERATE_TRAJ, PREV_SOL_TRAJ]:
 				# if a trajectory is provided or projected, need to get the newest linearization

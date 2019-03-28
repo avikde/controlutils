@@ -42,6 +42,11 @@ class LTVMPC:
 	- getLinearDynamics(y, u)
 	- dynamics(y, u) - if ITERATE_TRAJ is selected
 	'''
+	
+	# Parameters that could be modified --
+	# If returned u violated umin/umax by a fraction (this is useful for systems with small input magnitudes and large tolerance)
+	MAX_ULIM_VIOL_FRAC = None
+	# /parameters
 
 	def __init__(self, model, N, wx, wu, kdamping=0, polyBlocks=None, **settings):
 		'''
@@ -265,6 +270,14 @@ class LTVMPC:
 			print('Current y,u:', x0, u0)
 			self.debugResult(res)
 			raise ValueError(res.info.status)
+
+		if self.MAX_ULIM_VIOL_FRAC is not None:
+			# Check for constraint violations based on a % of what was requested to see if there are tolerance issues
+			uHorizon = res.x[(self.N+1)*self.m.nx:]
+			umin, umax, _, _ = self.m.getLimits()
+			# FIXME: change based on signs of umin/umax?
+			if np.any(np.amax(uHorizon) > (1 + self.MAX_ULIM_VIOL_FRAC) * umax) or np.any(np.amin(uHorizon) < (1 + self.MAX_ULIM_VIOL_FRAC) * umin):
+				print('Warning: u viol')
 
 		# Apply first control input to the plant, and store
 		self.ctrl = res.x[-self.N*self.m.nu:-(self.N-1)*self.m.nu]

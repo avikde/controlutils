@@ -275,9 +275,12 @@ class LTVMPC:
 			# Check for constraint violations based on a % of what was requested to see if there are tolerance issues
 			uHorizon = res.x[(self.N+1)*self.m.nx:]
 			umin, umax, _, _ = self.m.getLimits()
-			# FIXME: change based on signs of umin/umax?
-			if np.any(np.amax(uHorizon) > (1 + self.MAX_ULIM_VIOL_FRAC) * umax) or np.any(np.amin(uHorizon) < (1 + self.MAX_ULIM_VIOL_FRAC) * umin):
-				print('Warning: u viol')
+			# pick some thresholds to consider violation. This accounts for sign of umin/umax
+			umaxV = umax + np.absolute(umax) * self.MAX_ULIM_VIOL_FRAC
+			uminV = umin - np.absolute(umin) * self.MAX_ULIM_VIOL_FRAC
+
+			if np.any(np.amax(uHorizon) > umaxV) or np.any(np.amin(uHorizon) < uminV):
+				print('WARNING: u violated limit threshold fraction', self.MAX_ULIM_VIOL_FRAC)
 
 		# Apply first control input to the plant, and store
 		self.ctrl = res.x[-self.N*self.m.nu:-(self.N-1)*self.m.nu]

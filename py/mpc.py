@@ -46,9 +46,13 @@ class LTVMPC:
 	def __init__(self, model, N, wx, wu, kdamping=0, polyBlocks=None, **settings):
 		'''
 		model = model class with dynamics(), getLinearDynamics(), getLimits()
+
 		N = prediction horizon
+
 		wx,wu = initial weight on states,inputs (update with updateWeights)
+
 		kdamping = weight for kdamping * || u - uprev ||^2 term added to objective
+		
 		polyBlocks: see csc.init for help on specifying polyBlocks
 		'''
 		self.m = model
@@ -139,8 +143,11 @@ class LTVMPC:
 	
 	def updatePolyhedronConstraint(self, ti, pbi, Ci, di):
 		'''Update the polyhedron membership constraint for time i
+
 		The constraint added is Ci projection_pbi( x(ti) ) <= di
+
 		pbi = index into polyBlocks provided during init
+
 		To "remove" the constraint, just set di = np.full(*, np.inf)
 		'''
 		# Only C x <= d type constraints, so only change A and u

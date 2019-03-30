@@ -162,6 +162,18 @@ class LTVMPC:
 		assert Ci.shape[0] == self.polyBlocks[pbi][1]
 		assert Ci.shape[1] == self.polyBlocks[pbi][2]
 		self.u[ioffs : ioffs + len(di)] = di
+	
+	def updateStateConstraint(self, ti, xidx, u=None, l=None):
+		'''Update a state constraint
+
+		The constraint added is l <= x(ti)[xidx] <= u
+		'''
+		# get to the ineq constraints
+		ioffs = self.m.nx * (self.N + 1 + ti)
+		if u is not None:
+			self.u[ioffs + xidx] = u
+		if l is not None:
+			self.l[ioffs + xidx] = l
 
 	def updateWeights(self, wx=None, wu=None):
 		if wx is not None:

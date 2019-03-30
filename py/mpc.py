@@ -158,7 +158,9 @@ class LTVMPC:
 		# Only C x <= d type constraints, so only change A and u
 		ioffs = csc.updatePolyBlock(self.A, self.m.nx, self.m.nu, self.N, ti, self.polyBlocks, pbi, Ci)
 		# update u, but not l (which stays at -inf)
-		assert(Ci.shape[0] == len(di))
+		assert Ci.shape[0] == len(di)
+		assert Ci.shape[0] == self.polyBlocks[pbi][1]
+		assert Ci.shape[1] == self.polyBlocks[pbi][2]
 		self.u[ioffs : ioffs + len(di)] = di
 
 	def updateWeights(self, wx=None, wu=None):

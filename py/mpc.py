@@ -74,14 +74,14 @@ class LTVMPC:
 		# Objective function
 		self.Q = sparse.diags(wx)
 		self.QN = self.Q
-		R = sparse.diags(wu)
+		self.R = sparse.diags(wu)
 
 		assert len(wx) == self.m.nx
 		assert len(wu) == self.m.nu
 
 		# Cast MPC problem to a QP: x = (x(0),x(1),...,x(N),u(0),...,u(N-1))
 		# - quadratic objective
-		self.P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN, R + sparse.eye(self.m.nu) * kdamping, sparse.kron(sparse.eye(N - 1), R)]).tocsc()
+		self.P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN, self.R + sparse.eye(self.m.nu) * kdamping, sparse.kron(sparse.eye(N - 1), self.R)]).tocsc()
 		# After eliminating zero elements, since P is diagonal, the sparse format is particularly simple. If P is np x np, ...
 		self.P.eliminate_zeros()
 		szP = self.P.shape[0]
@@ -100,7 +100,7 @@ class LTVMPC:
 		# make up single goal xr for now - will get updated. NOTE: q is not sparse so we can update all of it
 		xr = np.zeros(self.m.nx)
 		x0 = np.zeros_like(xr)
-		q = np.hstack([np.kron(np.ones(N), -self.Q.dot(xr)), -self.QN.dot(xr), np.zeros(N*self.m.nu)])  # -uprev * damping goes in the u0 slot
+		q = np.hstack([np.kron(np.ones(N), -self.Q @ xr), -self.QN @ xr, np.zeros(N*self.m.nu)])  # -uprev * damping goes in the u0 slot
 		# Initial state will get updated
 		leq = np.hstack([-x0, np.zeros(self.N*self.m.nx)])
 		ueq = leq
@@ -181,6 +181,7 @@ class LTVMPC:
 			self.P.data[:(self.N + 1)*self.m.nx] = np.tile(wx, self.N + 1)
 		if wu is not None:
 			self.P.data[-self.N*self.m.nu:] = np.hstack((np.full(self.m.nu, self.kdamping) + np.array(wu), np.tile(wu, self.N - 1)))
+			self.R = sparse.diags(wu)
 	
 	def _sanitizeTrajAndCostModes(self, trajMode, costMode, x0):
 		'''Test if these modes all make sense'''
@@ -199,7 +200,7 @@ class LTVMPC:
 		return trajMode, costMode
 
 
-	def update(self, x0, xr, u0=None, trajMode=GIVEN_POINT_OR_TRAJ, costMode=TRAJ):
+	def update(self, x0, xr, u0=None, trajMode=GIVEN_POINT_OR_TRAJ, costMode=TRAJ, ugoalCost=False):
 		'''trajMode should be one of the constants in the group up top.
 
 		x0 --- either a (nx,) vector (current state) or an (N,nx) array with a given horizon (used with `trajMode=GIVEN_POINT_OR_TRAJ`). NOTE: when a horizon is provided, x0[0,:] must still have the current state.
@@ -220,9 +221,14 @@ class LTVMPC:
 		
 		costMode --- if FINAL, only xr (at the end of the horizon) contributes to the cost. If TRAJ, each point in the provided or constructed trajectory (see trajMode) contributes.
 
+		ugoalCost --- if True (and u0 is not None), u0 is incorporated into the linear cost term q
+
 		Returns: the next control input u0
 		'''
 		trajMode, costMode = self._sanitizeTrajAndCostModes(trajMode, costMode, x0)
+		# If you want u0 to affect the u cost, it must be provided
+		if u0 is None:
+			ugoalCost = False
 
 		if u0 is None:
 			u0 = self.ctrl  # use the previous control input
@@ -234,7 +240,15 @@ class LTVMPC:
 		self.u[:self.m.nx] = -xlin
 		
 		# Single point goal goes in cost (replaced below)
-		q = np.hstack([np.kron(np.ones(self.N), -self.Q.dot(xr)), -self.QN.dot(xr), np.zeros(self.N*self.m.nu)])
+		q = np.hstack([np.kron(np.ones(self.N), -self.Q @ xr), -self.QN @ xr, np.zeros(self.N*self.m.nu)])
+		if ugoalCost:
+			uoffs = (self.N+1)*self.m.nx  # offset into q where u0, u1, etc. terms appear
+			if len(u0.shape) > 1:
+				print('hihihi', u0[0,:])
+				for ii in range(u0.shape[0]):
+					q[uoffs + ii*self.m.nu:uoffs + (ii+1)*self.m.nu] = -self.R @ u0[ii,:]
+			else:
+				q[uoffs:uoffs + self.m.nu] = -self.R @ u0
 		
 		# First dynamics
 		dyn = self.m.getLinearDynamics(xlin, ulin)
@@ -277,7 +291,7 @@ class LTVMPC:
 			# /objective update
 
 		# add "damping" by penalizing changes from uprev to u0
-		q[-self.N*self.m.nu:-(self.N-1)*self.m.nu] = -self.kdamping * self.ctrl
+		q[-self.N*self.m.nu:-(self.N-1)*self.m.nu] -= self.kdamping * self.ctrl
 			
 		# Update
 		self.prob.update(l=self.l, u=self.u, q=q, Ax=self.A.data, Px=self.P.data)

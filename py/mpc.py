@@ -244,7 +244,7 @@ class LTVMPC:
 		if ugoalCost:
 			uoffs = (self.N+1)*self.m.nx  # offset into q where u0, u1, etc. terms appear
 			if len(u0.shape) > 1:
-				print('hihihi', u0[0,:])
+				# print('hihihi', u0[0,:])
 				for ii in range(u0.shape[0]):
 					q[uoffs + ii*self.m.nu:uoffs + (ii+1)*self.m.nu] = -self.R @ u0[ii,:]
 			else:

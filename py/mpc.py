@@ -315,7 +315,9 @@ class LTVMPC:
 			uminV = umin - np.absolute(umin) * self.MAX_ULIM_VIOL_FRAC
 
 			if np.any(np.amax(uHorizon) > umaxV) or np.any(np.amin(uHorizon) < uminV):
-				print('WARNING: u violated limit threshold fraction', self.MAX_ULIM_VIOL_FRAC)
+				# 
+				Ax = self.A @ res.x
+				print('WARNING: u violated limit ratio. Constraint violations', np.amin(self.u - Ax), np.amin(Ax - self.l))
 
 		# Apply first control input to the plant, and store
 		self.ctrl = res.x[-self.N*self.m.nu:-(self.N-1)*self.m.nu]

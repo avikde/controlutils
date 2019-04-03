@@ -139,12 +139,11 @@ class LTVMPC:
 					print('Constraint x', int((iviol - numxdyn)/self.m.nx), ',', (iviol - numxdyn) % self.m.nx)
 				else:
 					print('Constraint u', int((iviol - numxcon)/self.m.nu), ',', (iviol - numxcon) % self.m.nu)
-		# print(res.x.shape)
-		# # print((Ax - self.l)[-self.N*self.m.nu:-(self.N-1)*self.m.nu])
-		# # print((self.u - Ax)[-self.N*self.m.nu:-(self.N-1)*self.m.nu])
-		# print(np.min(Ax - self.l))
-		# print(np.min(self.u - Ax))
-		# print("HELLO")
+					
+		elif res.info.status == 'solved inaccurate':
+			# The inaccurate statuses define when the optimality, primal infeasibility or dual infeasibility conditions are satisfied with tolerances 10 times larger than the ones set.
+			# https://osqp.org/docs/interfaces/status_values.html
+			print('Try increasing max_iter to see if it can be solved more accurately')
 	
 	def updatePolyhedronConstraint(self, ti, pbi, Ci, di):
 		'''Update the polyhedron membership constraint for time i
@@ -320,7 +319,7 @@ class LTVMPC:
 					Ax = self.A @ res.x
 					# Try to adaptively refine precision to avoid this happening again. also see https://github.com/oxfordcontrol/osqp/issues/125
 					worstViolation = max(np.amax(Ax - self.u), np.amax(self.l - Ax))
-					newEps = 1e-2 * worstViolation  # empirically the violation seems to be 50x eps. 
+					newEps = 1e-2 * worstViolation  # tolerance is related to eps like this https://osqp.org/docs/solver/index.html#convergence
 					print('[mpc] warning: violated ulim ratio. Worst violation: ', worstViolation, 'new eps =', newEps)
 					self.prob.update_settings(eps_rel=newEps, eps_abs=newEps)
 

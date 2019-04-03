@@ -305,19 +305,24 @@ class LTVMPC:
 			print('Current y,u:', x0, u0)
 			self.debugResult(res)
 			raise ValueError(res.info.status)
+		else:
+			# Heuristics to detect "bad" solutions
+			if self.MAX_ULIM_VIOL_FRAC is not None:
+				# Check for constraint violations based on a % of what was requested to see if there are tolerance issues
+				uHorizon = res.x[(self.N+1)*self.m.nx:]
+				umin, umax, _, _ = self.m.getLimits()
+				# pick some thresholds to consider violation. This accounts for sign of umin/umax
+				umaxV = umax + np.absolute(umax) * self.MAX_ULIM_VIOL_FRAC
+				uminV = umin - np.absolute(umin) * self.MAX_ULIM_VIOL_FRAC
 
-		if self.MAX_ULIM_VIOL_FRAC is not None:
-			# Check for constraint violations based on a % of what was requested to see if there are tolerance issues
-			uHorizon = res.x[(self.N+1)*self.m.nx:]
-			umin, umax, _, _ = self.m.getLimits()
-			# pick some thresholds to consider violation. This accounts for sign of umin/umax
-			umaxV = umax + np.absolute(umax) * self.MAX_ULIM_VIOL_FRAC
-			uminV = umin - np.absolute(umin) * self.MAX_ULIM_VIOL_FRAC
-
-			if np.any(np.amax(uHorizon) > umaxV) or np.any(np.amin(uHorizon) < uminV):
-				# 
-				Ax = self.A @ res.x
-				print('WARNING: u violated limit ratio. Constraint violations', np.amin(self.u - Ax), np.amin(Ax - self.l))
+				if np.any(np.amax(uHorizon) > umaxV) or np.any(np.amin(uHorizon) < uminV):
+					# 
+					Ax = self.A @ res.x
+					# Try to adaptively refine precision to avoid this happening again. also see https://github.com/oxfordcontrol/osqp/issues/125
+					worstViolation = max(np.amax(Ax - self.u), np.amax(self.l - Ax))
+					newEps = 1e-2 * worstViolation  # empirically the violation seems to be 50x eps. 
+					print('[mpc] warning: violated ulim ratio. Worst violation: ', worstViolation, 'new eps =', newEps)
+					self.prob.update_settings(eps_rel=newEps, eps_abs=newEps)
 
 		# Apply first control input to the plant, and store
 		self.ctrl = res.x[-self.N*self.m.nu:-(self.N-1)*self.m.nu]

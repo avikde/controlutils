@@ -56,13 +56,17 @@ class LTVMPC:
 
 		wx,wu = initial weight on states,inputs (update with updateWeights)
 
-		kdamping = weight for kdamping * || u - uprev ||^2 term added to objective
+		kdamping = (diagonal) weight for (u-uprev)^T @ Kdamping @ (u-uprev) term added to objective. Either a scalar can be provided, Kdamping = kdamping*eye(nu), otherwise Kdamping = diag(kdamping)
 		
 		polyBlocks: see csc.init for help on specifying polyBlocks
 		'''
 		self.m = model
 		self.N = N
-		self.kdamping = kdamping
+		# store kdamping as a vector
+		if isinstance(kdamping, list):
+			self.kdamping = kdamping
+		else:
+			self.kdamping = np.full(self.m.nu, kdamping)
 		self.polyBlocks = polyBlocks
 
 		# Constraints
@@ -81,7 +85,7 @@ class LTVMPC:
 
 		# Cast MPC problem to a QP: x = (x(0),x(1),...,x(N),u(0),...,u(N-1))
 		# - quadratic objective
-		self.P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN, self.R + sparse.eye(self.m.nu) * kdamping, sparse.kron(sparse.eye(N - 1), self.R)]).tocsc()
+		self.P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN, self.R + sparse.diags(self.kdamping), sparse.kron(sparse.eye(N - 1), self.R)]).tocsc()
 		# After eliminating zero elements, since P is diagonal, the sparse format is particularly simple. If P is np x np, ...
 		self.P.eliminate_zeros()
 		szP = self.P.shape[0]
@@ -179,7 +183,7 @@ class LTVMPC:
 			# diagonal elements of P
 			self.P.data[:(self.N + 1)*self.m.nx] = np.tile(wx, self.N + 1)
 		if wu is not None:
-			self.P.data[-self.N*self.m.nu:] = np.hstack((np.full(self.m.nu, self.kdamping) + np.array(wu), np.tile(wu, self.N - 1)))
+			self.P.data[-self.N*self.m.nu:] = np.hstack((self.kdamping + np.array(wu), np.tile(wu, self.N - 1)))
 			self.R = sparse.diags(wu)
 	
 	def _sanitizeTrajAndCostModes(self, trajMode, costMode, x0):
@@ -290,7 +294,7 @@ class LTVMPC:
 			# /objective update
 
 		# add "damping" by penalizing changes from uprev to u0
-		q[-self.N*self.m.nu:-(self.N-1)*self.m.nu] -= self.kdamping * self.ctrl
+		q[-self.N*self.m.nu:-(self.N-1)*self.m.nu] -= np.multiply(self.kdamping, self.ctrl)
 			
 		# Update
 		self.prob.update(l=self.l, u=self.u, q=q, Ax=self.A.data, Px=self.P.data)

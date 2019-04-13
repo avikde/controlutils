@@ -28,12 +28,15 @@ def rot2lin(phiz):
 	'''Linearization of rotation (small angle)'''
 	return np.eye(2) + phiz * Skew2
 
-def rot(phi):
+def rot(phi, euler=False):
 	'''Either planar, or rotation vector for 3D'''
 	if len(phi) == 1:
 		return rot2(phi[0])
 	else:
-		return Rotation.from_rotvec(phi).as_dcm()
+		if euler:
+			return Rotation.from_euler('xyz',phi).as_dcm()
+		else:
+			return Rotation.from_rotvec(phi).as_dcm()
 
 def affineKinematics(q, dt, fullTwist=True):
 	'''Linearized kinematics of applying an SE(n) twist to a pose.

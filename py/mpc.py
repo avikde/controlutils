@@ -203,7 +203,7 @@ class LTVMPC:
 		return trajMode, costMode
 
 
-	def update(self, x0, xr, u0=None, trajMode=GIVEN_POINT_OR_TRAJ, costMode=TRAJ, ugoalCost=False):
+	def update(self, x0, xr, u0=None, ur=None, trajMode=GIVEN_POINT_OR_TRAJ, costMode=TRAJ, ugoalCost=False):
 		'''trajMode should be one of the constants in the group up top.
 
 		x0 --- either a (nx,) vector (current state) or an (N,nx) array with a given horizon (used with `trajMode=GIVEN_POINT_OR_TRAJ`). NOTE: when a horizon is provided, x0[0,:] must still have the current state.
@@ -211,6 +211,8 @@ class LTVMPC:
 		xr --- goal state (placed in the linear term of the objective)
 
 		u0 --- input to linearize around (does not matter in a lot of cases if the linearization does not depend on the input).
+
+		ur --- input to make cost around
 
 		trajMode --- 
 
@@ -243,7 +245,9 @@ class LTVMPC:
 		self.u[:self.m.nx] = -xlin
 		
 		# Single point goal goes in cost (replaced below)
-		q = np.hstack([np.kron(np.ones(self.N), -self.Q @ xr), -self.QN @ xr, np.zeros(self.N*self.m.nu)])
+		if ur is None:
+			ur = np.zeros(self.m.nu)
+		q = np.hstack([np.kron(np.ones(self.N), -self.Q @ xr), -self.QN @ xr, np.kron(np.ones(self.N), -self.R @ ur)])
 		if ugoalCost:
 			uoffs = (self.N+1)*self.m.nx  # offset into q where u0, u1, etc. terms appear
 			if len(u0.shape) > 1:

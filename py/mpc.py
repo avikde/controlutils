@@ -2,6 +2,7 @@ import numpy as np
 import scipy.sparse as sparse # for testing
 import osqp
 import sys
+import time
 try:
 	from . import csc
 except:
@@ -60,6 +61,8 @@ class LTVMPC:
 		
 		polyBlocks: see csc.init for help on specifying polyBlocks
 		'''
+		self.tqpsolve = np.nan
+		self.niter = np.nan
 		self.m = model
 		self.N = N
 		# store kdamping as a vector
@@ -301,11 +304,15 @@ class LTVMPC:
 		q[-self.N*self.m.nu:-(self.N-1)*self.m.nu] -= np.multiply(self.kdamping, self.ctrl)
 			
 		# Update
+		t0 = time.perf_counter()
 		self.prob.update(l=self.l, u=self.u, q=q, Ax=self.A.data, Px=self.P.data)
 		# print(A.data.shape)
 
 		# Solve
 		res = self.prob.solve()
+		# measure OSQP time
+		self.tqpsolve = time.perf_counter() - t0
+		self.niter = res.info.iter
 
 		# Check solver status
 		if res.info.status != 'solved':

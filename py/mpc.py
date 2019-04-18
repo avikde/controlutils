@@ -65,11 +65,15 @@ class LTVMPC:
         self.niter = np.nan
         self.m = model
         self.N = N
+        # store dims
+        self.nx = len(wx)
+        self.nu = len(wu)
+        
         # store kdamping as a vector
         if isinstance(kdamping, list):
             self.kdamping = kdamping
         else:
-            self.kdamping = np.full(self.m.nu, kdamping)
+            self.kdamping = np.full(self.nu, kdamping)
         self.polyBlocks = polyBlocks
 
         # Constraints
@@ -82,9 +86,6 @@ class LTVMPC:
         self.Q = sparse.diags(wx)
         self.QN = self.Q
         self.R = sparse.diags(wu)
-
-        assert len(wx) == self.m.nx
-        assert len(wu) == self.m.nu
 
         # Cast MPC problem to a QP: x = (x(0),x(1),...,x(N),u(0),...,u(N-1))
         # - quadratic objective
@@ -101,15 +102,15 @@ class LTVMPC:
         uineq = np.hstack([np.kron(np.ones(N+1), xmax), np.kron(np.ones(N), umax)])
 
         # Create the CSC A matrix manually.
-        # conA = CondensedA(self.m.nx, self.m.nu, N, polyBlocks=polyBlocks)
-        conA = csc.init(self.m.nx, self.m.nu, N, polyBlocks=polyBlocks)
+        # conA = CondensedA(self.nx, self.nu, N, polyBlocks=polyBlocks)
+        conA = csc.init(self.nx, self.nu, N, polyBlocks=polyBlocks)
         self.A = sparse.csc_matrix((conA.data, conA.indices, conA.indptr))
         # make up single goal xr for now - will get updated. NOTE: q is not sparse so we can update all of it
-        xr = np.zeros(self.m.nx)
+        xr = np.zeros(self.nx)
         x0 = np.zeros_like(xr)
-        q = np.hstack([np.kron(np.ones(N), -self.Q @ xr), -self.QN @ xr, np.zeros(N*self.m.nu)])  # -uprev * damping goes in the u0 slot
+        q = np.hstack([np.kron(np.ones(N), -self.Q @ xr), -self.QN @ xr, np.zeros(N*self.nu)])  # -uprev * damping goes in the u0 slot
         # Initial state will get updated
-        leq = np.hstack([-x0, np.zeros(self.N*self.m.nx)])
+        leq = np.hstack([-x0, np.zeros(self.N*self.nx)])
         ueq = leq
         self.l = np.hstack([leq, lineq])
         self.u = np.hstack([ueq, uineq])
@@ -125,7 +126,7 @@ class LTVMPC:
         self.prob.setup(self.P, q, self.A, self.l, self.u, warm_start=True, **settings)#, eps_abs=1e-05, eps_rel=1e-05
 
         # Variables to store the previous result in
-        self.ctrl = np.zeros(self.m.nu)
+        self.ctrl = np.zeros(self.nu)
         self.prevSol = None
 
     def debugResult(self, res):
@@ -137,15 +138,15 @@ class LTVMPC:
             PRIM_INFEAS_VIOL_THRESH = 1e-2
             v[np.abs(v) < PRIM_INFEAS_VIOL_THRESH] = 0
             print('Constraints corresponding to infeasibility:')
-            numxdyn = (self.N + 1) * self.m.nx
-            numxcon = numxdyn + (self.N + 1) * self.m.nx
+            numxdyn = (self.N + 1) * self.nx
+            numxcon = numxdyn + (self.N + 1) * self.nx
             for iviol in np.flatnonzero(v):
                 if iviol < numxdyn:
-                    print('Dynamics ti=', int(iviol/self.m.nx))
+                    print('Dynamics ti=', int(iviol/self.nx))
                 elif iviol < numxcon:
-                    print('Constraint x', int((iviol - numxdyn)/self.m.nx), ',', (iviol - numxdyn) % self.m.nx)
+                    print('Constraint x', int((iviol - numxdyn)/self.nx), ',', (iviol - numxdyn) % self.nx)
                 else:
-                    print('Constraint u', int((iviol - numxcon)/self.m.nu), ',', (iviol - numxcon) % self.m.nu)
+                    print('Constraint u', int((iviol - numxcon)/self.nu), ',', (iviol - numxcon) % self.nu)
                     
         elif res.info.status == 'solved inaccurate':
             # The inaccurate statuses define when the optimality, primal infeasibility or dual infeasibility conditions are satisfied with tolerances 10 times larger than the ones set.
@@ -162,7 +163,7 @@ class LTVMPC:
         To "remove" the constraint, just set di = np.full(*, np.inf)
         '''
         # Only C x <= d type constraints, so only change A and u
-        ioffs = csc.updatePolyBlock(self.A, self.m.nx, self.m.nu, self.N, ti, self.polyBlocks, pbi, Ci)
+        ioffs = csc.updatePolyBlock(self.A, self.nx, self.nu, self.N, ti, self.polyBlocks, pbi, Ci)
         # update u, but not l (which stays at -inf)
         assert Ci.shape[0] == len(di)
         assert Ci.shape[0] == self.polyBlocks[pbi][1]
@@ -175,7 +176,7 @@ class LTVMPC:
         The constraint added is l <= x(ti)[xidx] <= u
         '''
         # get to the ineq constraints
-        ioffs = self.m.nx * (self.N + 1 + ti)
+        ioffs = self.nx * (self.N + 1 + ti)
         if u is not None:
             self.u[ioffs + xidx] = u
         if l is not None:
@@ -184,9 +185,9 @@ class LTVMPC:
     def updateWeights(self, wx=None, wu=None):
         if wx is not None:
             # diagonal elements of P
-            self.P.data[:(self.N + 1)*self.m.nx] = np.tile(wx, self.N + 1)
+            self.P.data[:(self.N + 1)*self.nx] = np.tile(wx, self.N + 1)
         if wu is not None:
-            self.P.data[-self.N*self.m.nu:] = np.hstack((self.kdamping + np.array(wu), np.tile(wu, self.N - 1)))
+            self.P.data[-self.N*self.nu:] = np.hstack((self.kdamping + np.array(wu), np.tile(wu, self.N - 1)))
             self.R = sparse.diags(wu)
     
     def _sanitizeTrajAndCostModes(self, trajMode, costMode, x0):
@@ -244,21 +245,21 @@ class LTVMPC:
         xlin = x0[0,:] if len(x0.shape) > 1 else x0
         ulin = u0[0,:] if len(u0.shape) > 1 else u0
         # Assumes that when a trajectory is provided, the first is the initial condition (see docstring)
-        self.l[:self.m.nx] = -xlin
-        self.u[:self.m.nx] = -xlin
+        self.l[:self.nx] = -xlin
+        self.u[:self.nx] = -xlin
         
         # Single point goal goes in cost (replaced below)
         if ur is None:
-            ur = np.zeros(self.m.nu)
+            ur = np.zeros(self.nu)
         q = np.hstack([np.kron(np.ones(self.N), -self.Q @ xr), -self.QN @ xr, np.kron(np.ones(self.N), -self.R @ ur)])
         if ugoalCost:
-            uoffs = (self.N+1)*self.m.nx  # offset into q where u0, u1, etc. terms appear
+            uoffs = (self.N+1)*self.nx  # offset into q where u0, u1, etc. terms appear
             if len(u0.shape) > 1:
                 # print('hihihi', u0[0,:])
                 for ii in range(u0.shape[0]):
-                    q[uoffs + ii*self.m.nu:uoffs + (ii+1)*self.m.nu] = -self.R @ u0[ii,:]
+                    q[uoffs + ii*self.nu:uoffs + (ii+1)*self.nu] = -self.R @ u0[ii,:]
             else:
-                q[uoffs:uoffs + self.m.nu] = -self.R @ u0
+                q[uoffs:uoffs + self.nu] = -self.R @ u0
         
         # First dynamics
         dyn = self.m.getLinearDynamics(xlin, ulin)
@@ -278,8 +279,8 @@ class LTVMPC:
             elif trajMode == PREV_SOL_TRAJ:
                 # use the previous solution shifted by 1 timestep (till the end)
                 # NOTE: uses the end point twice (probably matters least then anyway)
-                prevSolIdx = self.m.nx * min(ti+1, self.N)  # index into prevSol
-                xlin = self.prevSol[prevSolIdx : prevSolIdx + self.m.nx]
+                prevSolIdx = self.nx * min(ti+1, self.N)  # index into prevSol
+                xlin = self.prevSol[prevSolIdx : prevSolIdx + self.nx]
                 
             if ti > 0 and (trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ITERATE_TRAJ, PREV_SOL_TRAJ]:
                 # if a trajectory is provided or projected, need to get the newest linearization
@@ -289,19 +290,19 @@ class LTVMPC:
             # Place new Ad, Bd in Aeq
             csc.updateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
             # Update RHS of constraint
-            fd = dyn[2] if bAffine else np.zeros(self.m.nx)
-            self.l[self.m.nx * (ti+1) : self.m.nx * (ti+2)] = -fd
-            self.u[self.m.nx * (ti+1) : self.m.nx * (ti+2)] = -fd
+            fd = dyn[2] if bAffine else np.zeros(self.nx)
+            self.l[self.nx * (ti+1) : self.nx * (ti+2)] = -fd
+            self.u[self.nx * (ti+1) : self.nx * (ti+2)] = -fd
             # /dynamics update --
 
             # Objective update in q --
             if costMode == TRAJ and (trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ITERATE_TRAJ, PREV_SOL_TRAJ]:
                 # cost along each point
-                q[self.m.nx * ti:self.m.nx * (ti + 1)] = -self.Q @ xlin
+                q[self.nx * ti:self.nx * (ti + 1)] = -self.Q @ xlin
             # /objective update
 
         # add "damping" by penalizing changes from uprev to u0
-        q[-self.N*self.m.nu:-(self.N-1)*self.m.nu] -= np.multiply(self.kdamping, self.ctrl)
+        q[-self.N*self.nu:-(self.N-1)*self.nu] -= np.multiply(self.kdamping, self.ctrl)
             
         # Update
         t0 = time.perf_counter()
@@ -323,7 +324,7 @@ class LTVMPC:
             # Heuristics to detect "bad" solutions
             if self.MAX_ULIM_VIOL_FRAC is not None:
                 # Check for constraint violations based on a % of what was requested to see if there are tolerance issues
-                uHorizon = res.x[(self.N+1)*self.m.nx:]
+                uHorizon = res.x[(self.N+1)*self.nx:]
                 umin, umax, _, _ = self.m.getLimits()
                 # pick some thresholds to consider violation. This accounts for sign of umin/umax
                 umaxV = umax + np.absolute(umax) * self.MAX_ULIM_VIOL_FRAC
@@ -339,7 +340,7 @@ class LTVMPC:
                     self.prob.update_settings(eps_rel=newEps, eps_abs=newEps)
 
         # Apply first control input to the plant, and store
-        self.ctrl = res.x[-self.N*self.m.nu:-(self.N-1)*self.m.nu]
+        self.ctrl = res.x[-self.N*self.nu:-(self.N-1)*self.nu]
         self.prevSol = res.x
 
         return self.ctrl

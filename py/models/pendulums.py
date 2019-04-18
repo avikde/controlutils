@@ -2,11 +2,12 @@
 Pendulum models for testing controls stuff
 """
 import autograd.numpy as np
+from ..model import Model
 
 # common parameters
 g = 9.81
 
-class Pendulum:
+class Pendulum(Model):
     """Single pendulum"""
     l = 1.0
     kd = 0.1
@@ -20,7 +21,7 @@ class Pendulum:
         return p1
 
 
-class DoublePendulum:
+class DoublePendulum(Model):
     """Class for model"""
     l1 = 1.0
     l2 = 1.0

@@ -1,4 +1,4 @@
-import numpy as np
+import autograd.numpy as np
 import scipy.sparse as sparse
 
 # These work for sparse as well as CondensedA

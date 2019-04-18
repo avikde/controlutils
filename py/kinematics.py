@@ -2,7 +2,7 @@
 Helpful utilities
 '''
 
-import numpy as np
+import autograd.numpy as np
 from scipy.spatial.transform import Rotation
 
 Skew2 = np.array([[0, -1], [1, 0]])

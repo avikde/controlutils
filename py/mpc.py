@@ -1,4 +1,4 @@
-import numpy as np
+import autograd.numpy as np
 import scipy.sparse as sparse # for testing
 import osqp
 import sys

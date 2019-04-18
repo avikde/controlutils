@@ -5,7 +5,7 @@ Modifications by Avik De
 
 from __future__ import division, print_function
  
-import numpy as np
+import nautograd.umpy as np
 import scipy.linalg
  
 def lqr(A,B,Q,R, eigs=False):

@@ -1,4 +1,4 @@
-import numpy as np
+import autograd.numpy as np
 from . import kinematics as kin
 
 def rectangle(xy, ang, width, height, rawxy=False):

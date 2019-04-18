@@ -13,9 +13,10 @@ class Model:
     def dynamics(self, y, u):
         """Continuous dynamics ydot = f(y, u)"""
         raise NotImplementedError()
+
     
-    def autoDLin(self, y0, u0):
-        """Use autograd to get discretized linearization at the provided point.
+    def autoLin(self, y0, u0):
+        """Use autograd to get linearization at the provided point.
 
         Returns A, B, c, where c is the affine component.
         """
@@ -27,11 +28,14 @@ class Model:
         dfdu = jacobian(lambda u: self.dynamics(y0, u))(u0)
 
         # add affine term so that linear dynamics can be projected forward
-        c = self.dt * (self.dynamics(y0, u0) - dfdy @ y0 - dfdu @ u0)
-        A = np.eye(len(y0)) + self.dt * dfdy
-        B = self.dt * dfdu
+        return dfdy, dfdu, self.dynamics(y0, u0) - dfdy @ y0 - dfdu @ u0
+        
+    
+    def autoDLin(self, y0, u0):
+        """Linearization of discretized system with euler integration"""
+        dfdy, dfdu, ydoterr = self.autoLin(y0, u0)
+        return np.eye(len(y0)) + self.dt * dfdy, self.dt * dfdu, self.dt * ydoterr
 
-        return A, B, c
 
     def getLinearDynamics(self, y, u):
         """Implementation that can be overriden"""

@@ -13,7 +13,7 @@ class Pendulum(Model):
     kd = 0.1
 
     def dynamics(self, y, u):
-        return np.array([y[1], -g * np.sin(y[0]) / self.l - self.kd * y[1] + u])
+        return np.array([y[1], -g * np.sin(y[0]) / self.l - self.kd * y[1] + u[0]])
 
     def kinematics(self, y):
         """Returns position of the end of each link"""

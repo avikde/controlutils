@@ -19,6 +19,10 @@ class Model:
 
         Returns A, B, c, where c is the affine component.
         """
+        # check inputs
+        y0 = np.asarray(y0)
+        u0 = np.asarray(u0)
+
         dfdy = jacobian(lambda y: self.dynamics(y, u0))(y0)
         dfdu = jacobian(lambda u: self.dynamics(y0, u))(u0)
 

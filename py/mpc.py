@@ -68,7 +68,7 @@ class LTVMPC:
         # store dims
         self.nx = len(wx)
         self.nu = len(wu)
-        
+
         # store kdamping as a vector
         if isinstance(kdamping, list):
             self.kdamping = kdamping
@@ -94,8 +94,8 @@ class LTVMPC:
         self.P.eliminate_zeros()
         szP = self.P.shape[0]
         # the data array just corresponds to the diagonal elements
-        assert((self.P.indices == range(szP)).all())
-        assert((self.P.indptr == range(szP + 1)).all())
+        assert (self.P.indices == range(szP)).all()
+        assert (self.P.indptr == range(szP + 1)).all() 
         # print(P.toarray(), P.data)
         # - input and state constraints
         lineq = np.hstack([np.kron(np.ones(N+1), xmin), np.kron(np.ones(N), umin)])
@@ -366,12 +366,12 @@ if __name__ == "__main__":
 
     # Tests ---
     if testConA:
-        assert(conA.shape == A.shape)
-        assert(conA.nnz == A.nnz)
-        assert((conA.indptr == A.indptr).all())
-        assert((conA.indices == A.indices).all())
+        assert conA.shape == A.shape
+        assert conA.nnz == A.nnz
+        assert (conA.indptr == A.indptr).all()
+        assert (conA.indices == A.indices).all()
         # both were filled with ones
-        assert((conA.data == A.data).all())
+        assert (conA.data == A.data).all()
 
     #  Usage: update blocks on a sparse, and a CondensedA, and compare to a newly created sparse
     Aeq = A[:(N+1)*nx, :]
@@ -392,9 +392,9 @@ if __name__ == "__main__":
     csc.updatePolyBlock(A, nx, nu, N, N, polyBlocks, 0, np.full((3,1), 123))
     # test update
     if testConA:
-        assert((conA.data == A2.data).all())
+        assert (conA.data == A2.data).all()
     if polyBlocks is None:
-        assert((A.data == A2.data).all())
+        assert (A.data == A2.data).all()
 
     # print(conA.indices)
     # print(A)

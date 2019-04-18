@@ -51,7 +51,9 @@ class LTVMPC:
 
     def __init__(self, model, N, wx, wu, kdamping=0, polyBlocks=None, **settings):
         '''
-        model = model class with dynamics(), getLinearDynamics(), getLimits()
+        model = model class with dynamics(), 
+        property `limits`
+        getLinearDynamics() (TBD)
 
         N = prediction horizon
 
@@ -77,7 +79,7 @@ class LTVMPC:
         self.polyBlocks = polyBlocks
 
         # Constraints
-        umin, umax, xmin, xmax = model.getLimits()
+        umin, umax, xmin, xmax = model.limits
 
         # Create an OSQP object
         self.prob = osqp.OSQP()
@@ -325,7 +327,7 @@ class LTVMPC:
             if self.MAX_ULIM_VIOL_FRAC is not None:
                 # Check for constraint violations based on a % of what was requested to see if there are tolerance issues
                 uHorizon = res.x[(self.N+1)*self.nx:]
-                umin, umax, _, _ = self.m.getLimits()
+                umin, umax, _, _ = self.m.limits
                 # pick some thresholds to consider violation. This accounts for sign of umin/umax
                 umaxV = umax + np.absolute(umax) * self.MAX_ULIM_VIOL_FRAC
                 uminV = umin - np.absolute(umin) * self.MAX_ULIM_VIOL_FRAC

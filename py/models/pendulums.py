@@ -27,10 +27,25 @@ class DoublePendulum(Model):
     l2 = 1.0
     m1 = 1.0
     m2 = 1.0
+
+    def __init__(self, nu=2):
+        """If nu=2 assumes double pendulum, and if nu=1, acrobot"""
+        self.nu = nu
+
+    def _getLimits(self):
+        if self.nu == 2:
+            umin = np.array([-100, -100])
+        else:
+            umin = np.array([-100])
+        umax = -umin
+        xmin = np.full(4, -np.inf)
+        xmax = -xmin
+        return umin, umax, xmin, xmax
+    limits = property(_getLimits)
     
     def dynamics(self, y, u):
         # unpack
-        if len(u) > 1:
+        if self.nu > 1:
             # double pendulum
             tau1 = u[0]
             tau2 = u[1]

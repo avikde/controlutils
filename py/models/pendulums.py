@@ -36,7 +36,7 @@ class DoublePendulum(Model):
             tau2 = u[1]
         else:
             # acrobot
-            tau1 = 0
+            tau1 = 0.0
             tau2 = u[0] 
         l1 = self.l1
         l2 = self.l2

@@ -56,9 +56,10 @@ def solve_ivp_dmpc(model, t_span, y0, dt, mpcdt, mpcgoal, N, wx, wu):
             # should we go again?
             if t_span[-1] - tev[-1] < dt:
                 break
-
-        if sol.status == 0:
+        elif sol.status == 0:
             break
+        else:
+            raise ValueError("Integration failed with status " + str(sol.status))
 
     # Return similar to solve_ivp
     return ret

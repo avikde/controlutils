@@ -79,7 +79,14 @@ class LTVMPC:
         self.polyBlocks = polyBlocks
 
         # Constraints
-        umin, umax, xmin, xmax = model.limits
+        if hasattr(model, 'limits'):
+            self.umin, self.umax, self.xmin, self.xmax = model.limits
+        else:
+            # unconstrained
+            self.umin = np.full(len(wu), -np.inf)
+            self.xmin = np.full(len(wx), -np.inf)
+            self.umax = -self.umin
+            self.xmax = -self.xmin
 
         # Create an OSQP object
         self.prob = osqp.OSQP()
@@ -100,8 +107,8 @@ class LTVMPC:
         assert (self.P.indptr == range(szP + 1)).all() 
         # print(P.toarray(), P.data)
         # - input and state constraints
-        lineq = np.hstack([np.kron(np.ones(N+1), xmin), np.kron(np.ones(N), umin)])
-        uineq = np.hstack([np.kron(np.ones(N+1), xmax), np.kron(np.ones(N), umax)])
+        lineq = np.hstack([np.kron(np.ones(N+1), self.xmin), np.kron(np.ones(N), self.umin)])
+        uineq = np.hstack([np.kron(np.ones(N+1), self.xmax), np.kron(np.ones(N), self.umax)])
 
         # Create the CSC A matrix manually.
         # conA = CondensedA(self.nx, self.nu, N, polyBlocks=polyBlocks)
@@ -327,10 +334,9 @@ class LTVMPC:
             if self.MAX_ULIM_VIOL_FRAC is not None:
                 # Check for constraint violations based on a % of what was requested to see if there are tolerance issues
                 uHorizon = res.x[(self.N+1)*self.nx:]
-                umin, umax, _, _ = self.m.limits
                 # pick some thresholds to consider violation. This accounts for sign of umin/umax
-                umaxV = umax + np.absolute(umax) * self.MAX_ULIM_VIOL_FRAC
-                uminV = umin - np.absolute(umin) * self.MAX_ULIM_VIOL_FRAC
+                umaxV = self.umax + np.absolute(self.umax) * self.MAX_ULIM_VIOL_FRAC
+                uminV = self.umin - np.absolute(self.umin) * self.MAX_ULIM_VIOL_FRAC
 
                 if np.any(np.amax(uHorizon) > umaxV) or np.any(np.amin(uHorizon) < uminV):
                     # 

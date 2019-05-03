@@ -92,3 +92,46 @@ class DoublePendulum(Model):
         p1 = self.l1 * np.array([-np.sin(y[0]), -np.cos(y[0])])
         p2 = p1 + self.l2 * np.array([-np.sin(y[0] + y[1]), -np.cos(y[0] + y[1])])
         return p1, p2
+
+class PendulumFlyWheel(Model):
+    """Equations from Pratt (2006)"""
+    m = 1.0
+    g = 9.81
+    J = 1e-3
+
+    def dynamics(self, y, u):
+        qdot = y[3:]
+        fk = u[0]
+        tauh = u[1]
+        l = np.sqrt(y[0]**2 + y[1]**2)
+        tha = np.arctan2(y[0], y[1])
+        return np.hstack((qdot,
+            np.array([1/self.m * (fk * np.sin(tha) - tauh/l * np.cos(tha)),
+            -self.g + 1/self.m * (fk * np.cos(tha) + tauh/l * np.sin(tha)),
+            tauh/self.J ])
+        ))
+
+    def kinematics(self, y):
+        """Returns position of the end of each link"""
+        p1 = self.l * y[0:2]
+        return p1
+
+class LIP(Model):
+    """Equations from Pratt (2006)"""
+    m = 1.0
+    g = 9.81
+    J = 1e-3
+    z0 = 0.1
+
+    def dynamics(self, y, u):
+        qdot = y[2:]
+        tauh = u[0]
+        return np.hstack((qdot,
+            np.array([self.g/self.z0 * y[0] - 1./(self.m * self.z0) * tauh,
+            tauh/self.J ])
+        ))
+
+    def kinematics(self, y):
+        """Returns position of the end of each link"""
+        p1 = self.l * np.array([y[0], self.z0])
+        return p1

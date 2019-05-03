@@ -113,7 +113,7 @@ class PendulumFlyWheel(Model):
 
     def kinematics(self, y):
         """Returns position of the end of each link"""
-        p1 = self.l * y[0:2]
+        p1 = y[0:2]
         return p1
 
 class LIP(Model):
@@ -133,5 +133,5 @@ class LIP(Model):
 
     def kinematics(self, y):
         """Returns position of the end of each link"""
-        p1 = self.l * np.array([y[0], self.z0])
+        p1 = np.array([y[0], self.z0])
         return p1

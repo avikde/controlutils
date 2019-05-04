@@ -96,7 +96,6 @@ class DoublePendulum(Model):
 class PendulumFlyWheel(Model):
     """Equations from Pratt (2006)"""
     m = 1.0
-    g = 9.81
     J = 1e-3
 
     def dynamics(self, y, u):
@@ -106,7 +105,7 @@ class PendulumFlyWheel(Model):
         l = np.sqrt(y[0]**2 + y[1]**2)
         return np.hstack((qdot,
             np.array([1/self.m * (fk * y[0]/l - tauh/l * y[1]/l),
-            -self.g + 1/self.m * (fk * y[1]/l + tauh/l * y[0]/l),
+            -g + 1/self.m * (fk * y[1]/l + tauh/l * y[0]/l),
             tauh/self.J ])
         ))
 
@@ -118,7 +117,6 @@ class PendulumFlyWheel(Model):
 class LIP(Model):
     """Equations from Pratt (2006)"""
     m = 1.0
-    g = 9.81
     J = 1e-3
     z0 = 0.1
 
@@ -126,7 +124,7 @@ class LIP(Model):
         qdot = y[2:]
         tauh = u[0]
         return np.hstack((qdot,
-            np.array([self.g/self.z0 * y[0] - 1./(self.m * self.z0) * tauh,
+            np.array([g/self.z0 * y[0] - 1./(self.m * self.z0) * tauh,
             tauh/self.J ])
         ))
 

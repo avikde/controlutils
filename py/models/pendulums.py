@@ -104,10 +104,9 @@ class PendulumFlyWheel(Model):
         fk = u[0]
         tauh = u[1]
         l = np.sqrt(y[0]**2 + y[1]**2)
-        tha = np.arctan2(y[0], y[1])
         return np.hstack((qdot,
-            np.array([1/self.m * (fk * np.sin(tha) - tauh/l * np.cos(tha)),
-            -self.g + 1/self.m * (fk * np.cos(tha) + tauh/l * np.sin(tha)),
+            np.array([1/self.m * (fk * y[0]/l - tauh/l * y[1]/l),
+            -self.g + 1/self.m * (fk * y[1]/l + tauh/l * y[0]/l),
             tauh/self.J ])
         ))
 

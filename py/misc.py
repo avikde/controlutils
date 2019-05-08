@@ -1,7 +1,7 @@
 import autograd.numpy as np
 from . import kinematics as kin
 
-def rectangle(xy, ang, width, height, rawxy=False):
+def rectangle(xy, ang, width, height, rawxy=False, **patchkw):
     '''draw a planar rectangle using matplotlib but based on the center
     '''
     from matplotlib.patches import Polygon
@@ -21,5 +21,5 @@ def rectangle(xy, ang, width, height, rawxy=False):
     for i in range(4):
         corners[i,:] = xy + Ryaw @ di[i,:]
 
-    return corners if rawxy else Polygon(corners)
+    return corners if rawxy else Polygon(corners, **patchkw)
 

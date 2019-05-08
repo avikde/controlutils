@@ -14,21 +14,23 @@ class Model:
         """Continuous dynamics ydot = f(y, u)"""
         raise NotImplementedError()
 
-    
-    def autoLin(self, y0, u0):
-        """Use autograd to get linearization at the provided point.
-
-        Returns A, B, c, where c is the affine component.
-        """
+    def _autoLinJac(self, y0, u0):
         # check inputs
         y0 = np.asarray(y0)
         u0 = np.asarray(u0)
-
-        dfdy = jacobian(lambda y: self.dynamics(y, u0))(y0)
-        dfdu = jacobian(lambda u: self.dynamics(y0, u))(u0)
-
+        dfdy = jacobian(lambda y: self.dynamics(y, u0))
+        dfdu = jacobian(lambda u: self.dynamics(y0, u))
+        return dfdy, dfdu
+    
+    def autoLin(self, y0, u0):
+        """Use autograd to get linearization at the provided point.
+        Returns A, B, c, where c is the affine component.
+        """
+        dfdy, dfdu = self._autoLinJac(y0, u0)
+        A = dfdy(y0)
+        B = dfdu(u0)
         # add affine term so that linear dynamics can be projected forward
-        return dfdy, dfdu, self.dynamics(y0, u0) - dfdy @ y0 - dfdu @ u0
+        return A, B, self.dynamics(y0, u0) - A @ y0 - B @ u0
         
     
     def autoDLin(self, y0, u0):

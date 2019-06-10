@@ -278,9 +278,11 @@ class LTVMPC:
         for ti in range(self.N):
             # Dynamics update in the equality constraint (also set xlin) --
             # Get linearization point if it is provided
-            if trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1:
-                xlin = x0[i, :]
-                ulin = u0[i, :]
+            if trajMode == GIVEN_POINT_OR_TRAJ:
+                if len(x0.shape) > 1:
+                    xlin = x0[ti, :]
+                if len(u0.shape) > 1:
+                    ulin = u0[ti, :]
             # Get linearization point by iterating a provided input
             elif trajMode in [ITERATE_TRAJ] and ti > 0:
                 # update the point at which the next linearization will happen

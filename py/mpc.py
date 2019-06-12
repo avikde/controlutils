@@ -1,8 +1,6 @@
 import autograd.numpy as np
 import scipy.sparse as sparse # for testing
-import osqp
 import sys
-import time
 try:
     from . import csc, ltvsystem
 except:
@@ -52,27 +50,24 @@ class LTVMPC:
         
         polyBlocks: see csc.init for help on specifying polyBlocks
         '''
-        self.tqpsolve = np.nan
-        self.niter = np.nan
         self.ltvsys = ltvsystem.LTVSystem(model)
+        # TODO: eliminate; in ltvsys
         self.N = N
         # store dims
         self.nx = len(wx)
         self.nu = len(wu)
-
-        # store kdamping as a vector
-        if isinstance(kdamping, list):
-            self.kdamping = kdamping
-        else:
-            self.kdamping = np.full(self.nu, kdamping)
-
-        # Create an OSQP object
-        self.prob = osqp.OSQP()
         
         # QP state: x = (y(0),y(1),...,y(N),u(0),...,u(N-1))
         # Dynamics and constraints
         x0 = np.zeros(self.nx) # Initial state will get updated
         self.ltvsys.init(self.nx, self.nu, N, x0, polyBlocks=polyBlocks)
+
+        # Objective stuf ---
+        # store kdamping as a vector
+        if isinstance(kdamping, list):
+            self.kdamping = kdamping
+        else:
+            self.kdamping = np.full(self.nu, kdamping)
         
         # Objective function
         self.Q = sparse.diags(wx)
@@ -92,38 +87,13 @@ class LTVMPC:
         # make up single goal xr for now - will get updated. NOTE: q is not sparse so we can update all of it
         xr = np.zeros_like(x0)
         q = np.hstack([np.kron(np.ones(N), -self.Q @ xr), -self.QN @ xr, np.zeros(N*self.nu)])  # -uprev * damping goes in the u0 slot
-        
-        # Full so that it is not made sparse. prob.update() cannot change the sparsity structure
-        # Setup workspace
-        self.prob.setup(self.P, q, self.ltvsys.A, self.ltvsys.l, self.ltvsys.u, warm_start=True, **settings)#, eps_abs=1e-05, eps_rel=1e-05
+        # /---
+
+        self.ltvsys.initSolver(self.P, q, **settings)
 
         # Variables to store the previous result in
         self.ctrl = np.zeros(self.nu)
         self.prevSol = None
-
-    def debugResult(self, res):
-        # Debugging infeasible
-        if res.info.status == 'primal infeasible':
-            # NOTE: when infeasible, OSQP appears to return a np.ndarray vector in res.x, but each element is "None"
-            v = res.prim_inf_cert
-            # Try to figure out which constraints are being violated
-            PRIM_INFEAS_VIOL_THRESH = 1e-2
-            v[np.abs(v) < PRIM_INFEAS_VIOL_THRESH] = 0
-            print('Constraints corresponding to infeasibility:')
-            numxdyn = (self.N + 1) * self.nx
-            numxcon = numxdyn + (self.N + 1) * self.nx
-            for iviol in np.flatnonzero(v):
-                if iviol < numxdyn:
-                    print('Dynamics ti=', int(iviol/self.nx))
-                elif iviol < numxcon:
-                    print('Constraint x', int((iviol - numxdyn)/self.nx), ',', (iviol - numxdyn) % self.nx)
-                else:
-                    print('Constraint u', int((iviol - numxcon)/self.nu), ',', (iviol - numxcon) % self.nu)
-                    
-        elif res.info.status == 'solved inaccurate':
-            # The inaccurate statuses define when the optimality, primal infeasibility or dual infeasibility conditions are satisfied with tolerances 10 times larger than the ones set.
-            # https://osqp.org/docs/interfaces/status_values.html
-            print('Try increasing max_iter to see if it can be solved more accurately')
 
     def updateWeights(self, wx=None, wu=None):
         if wx is not None:
@@ -170,6 +140,7 @@ class LTVMPC:
         
         xtraj = self.ltvsys.updateTrajectory(x0, u0, trajMode)
         
+        # Update objective P,q ---
         # Single point goal goes in cost (replaced below)
         if ur is None:
             ur = np.zeros(self.nu)
@@ -192,44 +163,11 @@ class LTVMPC:
 
         # add "damping" by penalizing changes from uprev to u0
         q[-self.N*self.nu:-(self.N-1)*self.nu] -= np.multiply(self.kdamping, self.ctrl)
-            
-        # Update
-        t0 = time.perf_counter()
-        self.prob.update(l=self.ltvsys.l, u=self.ltvsys.u, q=q, Ax=self.ltvsys.A.data, Px=self.P.data)
-        # print(A.data.shape)
+        # /----
 
-        # Solve
-        res = self.prob.solve()
-        # measure OSQP time
-        self.tqpsolve = time.perf_counter() - t0
-        self.niter = res.info.iter
-
-        # Check solver status
-        if res.info.status != 'solved':
-            print('Current y,u:', x0, u0)
-            self.debugResult(res)
-            raise ValueError(res.info.status)
-        else:
-            # Heuristics to detect "bad" solutions
-            if self.ltvsys.MAX_ULIM_VIOL_FRAC is not None:
-                # Check for constraint violations based on a % of what was requested to see if there are tolerance issues
-                uHorizon = res.x[(self.N+1)*self.nx:]
-                # pick some thresholds to consider violation. This accounts for sign of umin/umax
-                umaxV = self.umax + np.absolute(self.umax) * self.MAX_ULIM_VIOL_FRAC
-                uminV = self.umin - np.absolute(self.umin) * self.MAX_ULIM_VIOL_FRAC
-
-                if np.any(np.amax(uHorizon) > umaxV) or np.any(np.amin(uHorizon) < uminV):
-                    # 
-                    Ax = self.A @ res.x
-                    # Try to adaptively refine precision to avoid this happening again. also see https://github.com/oxfordcontrol/osqp/issues/125
-                    worstViolation = max(np.amax(Ax - self.u), np.amax(self.l - Ax))
-                    newEps = 1e-2 * worstViolation  # tolerance is related to eps like this https://osqp.org/docs/solver/index.html#convergence
-                    print('[mpc] warning: violated ulim ratio. Worst violation: ', worstViolation, 'new eps =', newEps)
-                    self.prob.update_settings(eps_rel=newEps, eps_abs=newEps)
-
+        self.prevSol = self.ltvsys.solve(self.P.data, q)
         # Apply first control input to the plant, and store
-        self.ctrl = res.x[-self.N*self.nu:-(self.N-1)*self.nu]
-        self.prevSol = res.x
+        self.ctrl = self.prevSol[-self.N*self.nu:-(self.N-1)*self.nu]
 
         return self.ctrl
 

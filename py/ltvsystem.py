@@ -1,5 +1,7 @@
 import autograd.numpy as np
 import scipy.sparse as sparse
+import osqp
+import time
 from . import csc
 
 """
@@ -24,6 +26,8 @@ class LTVDirTran:
 
     def __init__(self, model):
         self.m = model
+        self.tqpsolve = np.nan
+        self.niter = np.nan
 
     def init(self, nx, nu, N, x0, polyBlocks=None, useModelLimits=True):
         """Return A, l, u"""
@@ -158,7 +162,75 @@ class LTVSystem(LTVDirTran):
     MAX_ULIM_VIOL_FRAC = None
     # /parameters
 
-    pass   
+    def initSolver(self, P, q, **settings):
+        # Create an OSQP object
+        self.prob = osqp.OSQP()
+        # Full so that it is not made sparse. prob.update() cannot change the sparsity structure
+        # Setup workspace
+        self.prob.setup(P, q, self.A, self.l, self.u, warm_start=True, **settings)#, eps_abs=1e-05, eps_rel=1e-05
+        
+
+    def debugResult(self, res):
+        # Debugging infeasible
+        if res.info.status == 'primal infeasible':
+            # NOTE: when infeasible, OSQP appears to return a np.ndarray vector in res.x, but each element is "None"
+            v = res.prim_inf_cert
+            # Try to figure out which constraints are being violated
+            PRIM_INFEAS_VIOL_THRESH = 1e-2
+            v[np.abs(v) < PRIM_INFEAS_VIOL_THRESH] = 0
+            print('Constraints corresponding to infeasibility:')
+            numxdyn = (self.N + 1) * self.nx
+            numxcon = numxdyn + (self.N + 1) * self.nx
+            for iviol in np.flatnonzero(v):
+                if iviol < numxdyn:
+                    print('Dynamics ti=', int(iviol/self.nx))
+                elif iviol < numxcon:
+                    print('Constraint x', int((iviol - numxdyn)/self.nx), ',', (iviol - numxdyn) % self.nx)
+                else:
+                    print('Constraint u', int((iviol - numxcon)/self.nu), ',', (iviol - numxcon) % self.nu)
+                    
+        elif res.info.status == 'solved inaccurate':
+            # The inaccurate statuses define when the optimality, primal infeasibility or dual infeasibility conditions are satisfied with tolerances 10 times larger than the ones set.
+            # https://osqp.org/docs/interfaces/status_values.html
+            print('Try increasing max_iter to see if it can be solved more accurately')
+    
+    def solve(self, Pdata, q):
+        
+        # Update
+        t0 = time.perf_counter()
+        self.prob.update(l=self.l, u=self.u, q=q, Ax=self.A.data, Px=Pdata)
+        # print(A.data.shape)
+
+        # Solve
+        res = self.prob.solve()
+        # measure OSQP time
+        self.tqpsolve = time.perf_counter() - t0
+        self.niter = res.info.iter
+
+        # Check solver status
+        if res.info.status != 'solved':
+            print('Current y,u:', x0, u0)
+            self.debugResult(res)
+            raise ValueError(res.info.status)
+        else:
+            # Heuristics to detect "bad" solutions
+            if self.MAX_ULIM_VIOL_FRAC is not None:
+                # Check for constraint violations based on a % of what was requested to see if there are tolerance issues
+                uHorizon = res.x[(self.N+1)*self.nx:]
+                # pick some thresholds to consider violation. This accounts for sign of umin/umax
+                umaxV = self.umax + np.absolute(self.umax) * self.MAX_ULIM_VIOL_FRAC
+                uminV = self.umin - np.absolute(self.umin) * self.MAX_ULIM_VIOL_FRAC
+
+                if np.any(np.amax(uHorizon) > umaxV) or np.any(np.amin(uHorizon) < uminV):
+                    # 
+                    Ax = self.A @ res.x
+                    # Try to adaptively refine precision to avoid this happening again. also see https://github.com/oxfordcontrol/osqp/issues/125
+                    worstViolation = max(np.amax(Ax - self.u), np.amax(self.l - Ax))
+                    newEps = 1e-2 * worstViolation  # tolerance is related to eps like this https://osqp.org/docs/solver/index.html#convergence
+                    print('[mpc] warning: violated ulim ratio. Worst violation: ', worstViolation, 'new eps =', newEps)
+                    self.prob.update_settings(eps_rel=newEps, eps_abs=newEps)
+
+        return res.x
 
 if __name__ == "__main__":
     print("Testing LTVSystem")

@@ -206,11 +206,10 @@ class LTVDirTran:
                 self.q[uoffs + ii*self.nu:uoffs + (ii+1)*self.nu] = -self.R @ u0[ii,:]
 
         for ti in range(self.N):
-            # Objective update in q --
-            if costMode == TRAJ and (trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ITERATE_TRAJ, PREV_SOL_TRAJ]:
+            # FIXME: need to look through and make sense of these modes
+            if costMode == TRAJ and (trajMode == GIVEN_POINT_OR_TRAJ) or trajMode in [ITERATE_TRAJ, PREV_SOL_TRAJ]:
                 # cost along each point
                 self.q[self.nx * ti:self.nx * (ti + 1)] = -self.Q @ self.xtraj[ti, :self.nx]
-            # /objective update
 
         # add "damping" by penalizing changes from uprev to u0
         self.q[-self.N*self.nu:-(self.N-1)*self.nu] -= np.multiply(self.kdamping, udamp)

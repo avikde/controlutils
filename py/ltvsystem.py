@@ -19,18 +19,28 @@ ITERATE_TRAJ = 1
 PREV_SOL_TRAJ = 2
 SQP = 4
 
-class LTVSystem:
-    """This deals with the (LTV) dynamics and constraints"""
+class LTVDirTran:
+    """This deals with the (LTV) dynamics, constraints, and trajectory"""
 
     def __init__(self, model):
         self.m = model
 
-    def init(self, nx, nu, N, x0, xmin, xmax, umin, umax, polyBlocks=None):
+    def init(self, nx, nu, N, x0, polyBlocks=None, useModelLimits=True):
         """Return A, l, u"""
         self.nx = nx
         self.nu = nu
         self.N = N
         self.polyBlocks = polyBlocks
+
+        # Constraints
+        if hasattr(self.m, 'limits') and useModelLimits:
+            self.umin, self.umax, self.xmin, self.xmax = self.ltvsystem.m.limits
+        else:
+            # unconstrained
+            self.umin = np.full(nu, -np.inf)
+            self.xmin = np.full(nx, -np.inf)
+            self.umax = -self.umin
+            self.xmax = -self.xmin
 
         # Create the CSC A matrix manually.
         # conA = CondensedA(self.nx, self.nu, N, polyBlocks=polyBlocks)
@@ -38,8 +48,8 @@ class LTVSystem:
         self.A = sparse.csc_matrix((conA.data, conA.indices, conA.indptr))
         
         # - input and state constraints
-        lineq = np.hstack([np.kron(np.ones(N+1), xmin), np.kron(np.ones(N), umin)])
-        uineq = np.hstack([np.kron(np.ones(N+1), xmax), np.kron(np.ones(N), umax)])
+        lineq = np.hstack([np.kron(np.ones(N+1), self.xmin), np.kron(np.ones(N), self.umin)])
+        uineq = np.hstack([np.kron(np.ones(N+1), self.xmax), np.kron(np.ones(N), self.umax)])
         
         leq = np.hstack([-x0, np.zeros(N*self.nx)])
         ueq = leq
@@ -138,6 +148,17 @@ class LTVSystem:
             self.xtraj[ti, :] = xlin
 
         return self.xtraj
+
+
+class LTVSystem(LTVDirTran):
+    """Combine LTV dynamics with some aspects of objective"""
+    
+    # Parameters that could be modified --
+    # If returned u violated umin/umax by a fraction (this is useful for systems with small input magnitudes and large tolerance)
+    MAX_ULIM_VIOL_FRAC = None
+    # /parameters
+
+    pass   
 
 if __name__ == "__main__":
     print("Testing LTVSystem")

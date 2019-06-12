@@ -37,11 +37,6 @@ class LTVMPC:
     - getLinearDynamics(y, u)
     - dynamics(y, u) - if ITERATE_TRAJ is selected
     '''
-    
-    # Parameters that could be modified --
-    # If returned u violated umin/umax by a fraction (this is useful for systems with small input magnitudes and large tolerance)
-    MAX_ULIM_VIOL_FRAC = None
-    # /parameters
 
     def __init__(self, model, N, wx, wu, kdamping=0, polyBlocks=None, **settings):
         '''
@@ -59,7 +54,6 @@ class LTVMPC:
         '''
         self.tqpsolve = np.nan
         self.niter = np.nan
-        self.m = model
         self.ltvsys = ltvsystem.LTVSystem(model)
         self.N = N
         # store dims
@@ -72,23 +66,13 @@ class LTVMPC:
         else:
             self.kdamping = np.full(self.nu, kdamping)
 
-        # Constraints
-        if hasattr(self.m, 'limits'):
-            self.umin, self.umax, self.xmin, self.xmax = self.m.limits
-        else:
-            # unconstrained
-            self.umin = np.full(len(wu), -np.inf)
-            self.xmin = np.full(len(wx), -np.inf)
-            self.umax = -self.umin
-            self.xmax = -self.xmin
-
         # Create an OSQP object
         self.prob = osqp.OSQP()
         
         # QP state: x = (y(0),y(1),...,y(N),u(0),...,u(N-1))
         # Dynamics and constraints
         x0 = np.zeros(self.nx) # Initial state will get updated
-        self.ltvsys.init(self.nx, self.nu, N, x0, self.xmin, self.xmax, self.umin, self.umax, polyBlocks=polyBlocks)
+        self.ltvsys.init(self.nx, self.nu, N, x0, polyBlocks=polyBlocks)
         
         # Objective function
         self.Q = sparse.diags(wx)
@@ -227,7 +211,7 @@ class LTVMPC:
             raise ValueError(res.info.status)
         else:
             # Heuristics to detect "bad" solutions
-            if self.MAX_ULIM_VIOL_FRAC is not None:
+            if self.ltvsys.MAX_ULIM_VIOL_FRAC is not None:
                 # Check for constraint violations based on a % of what was requested to see if there are tolerance issues
                 uHorizon = res.x[(self.N+1)*self.nx:]
                 # pick some thresholds to consider violation. This accounts for sign of umin/umax

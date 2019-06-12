@@ -167,13 +167,8 @@ class LTVMPC:
 
 
     def update(self, x0, xr, u0=None, ur=None, trajMode=ltvsystem.GIVEN_POINT_OR_TRAJ, costMode=TRAJ, ugoalCost=False):
-        '''trajMode should be one of the constants in the group up top.
-
-        x0 --- either a (nx,) vector (current state) or an (N,nx) array with a given horizon (used with `trajMode=GIVEN_POINT_OR_TRAJ`). NOTE: when a horizon is provided, x0[0,:] must still have the current state.
-
+        '''
         xr --- goal state (placed in the linear term of the objective)
-
-        u0 --- input to linearize around (does not matter in a lot of cases if the linearization does not depend on the input).
 
         ur --- input to make cost around
         
@@ -187,15 +182,9 @@ class LTVMPC:
         # If you want u0 to affect the u cost, it must be provided
         if u0 is None:
             ugoalCost = False
-
-        if u0 is None:
             u0 = self.ctrl  # use the previous control input
-        # Update the initial state
-        xlin = x0[0,:] if len(x0.shape) > 1 else x0
-        ulin = u0[0,:] if len(u0.shape) > 1 else u0
-        # Assumes that when a trajectory is provided, the first is the initial condition (see docstring)
-        self.ltvsys.l[:self.nx] = -xlin
-        self.ltvsys.u[:self.nx] = -xlin
+        
+        xtraj = self.ltvsys.updateTrajectory(x0, u0, trajMode)
         
         # Single point goal goes in cost (replaced below)
         if ur is None:
@@ -209,47 +198,12 @@ class LTVMPC:
                     q[uoffs + ii*self.nu:uoffs + (ii+1)*self.nu] = -self.R @ u0[ii,:]
             else:
                 q[uoffs:uoffs + self.nu] = -self.R @ u0
-        
-        # First dynamics
-        dyn = self.m.getLinearDynamics(xlin, ulin)
-        Ad, Bd = dyn[0:2]
-        bAffine = len(dyn) > 2
-            
-        for ti in range(self.N):
-            # Dynamics update in the equality constraint (also set xlin) --
-            # Get linearization point if it is provided
-            if trajMode == ltvsystem.GIVEN_POINT_OR_TRAJ:
-                if len(x0.shape) > 1:
-                    xlin = x0[ti, :]
-                if len(u0.shape) > 1:
-                    ulin = u0[ti, :]
-            # Get linearization point by iterating a provided input
-            elif trajMode in [ltvsystem.ITERATE_TRAJ] and ti > 0:
-                # update the point at which the next linearization will happen
-                xlin = self.m.dynamics(xlin, ulin)
-            elif trajMode == ltvsystem.PREV_SOL_TRAJ:
-                # use the previous solution shifted by 1 timestep (till the end)
-                # NOTE: uses the end point twice (probably matters least then anyway)
-                prevSolIdx = self.nx * min(ti+1, self.N)  # index into prevSol
-                xlin = self.prevSol[prevSolIdx : prevSolIdx + self.nx]
-                
-            if ti > 0 and (trajMode == ltvsystem.GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ltvsystem.ITERATE_TRAJ, ltvsystem.PREV_SOL_TRAJ]:
-                # if a trajectory is provided or projected, need to get the newest linearization
-                dyn = self.m.getLinearDynamics(xlin, ulin)
-                Ad, Bd = dyn[0:2]
-            
-            # Place new Ad, Bd in Aeq
-            csc.updateDynamics(self.ltvsys.A, self.N, ti, Ad=Ad, Bd=Bd)
-            # Update RHS of constraint
-            fd = dyn[2] if bAffine else np.zeros(self.nx)
-            self.ltvsys.l[self.nx * (ti+1) : self.nx * (ti+2)] = -fd
-            self.ltvsys.u[self.nx * (ti+1) : self.nx * (ti+2)] = -fd
-            # /dynamics update --
 
+        for ti in range(self.N):
             # Objective update in q --
             if costMode == TRAJ and (trajMode == ltvsystem.GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ltvsystem.ITERATE_TRAJ, ltvsystem.PREV_SOL_TRAJ]:
                 # cost along each point
-                q[self.nx * ti:self.nx * (ti + 1)] = -self.Q @ xlin
+                q[self.nx * ti:self.nx * (ti + 1)] = -self.Q @ xtraj[ti, :]
             # /objective update
 
         # add "damping" by penalizing changes from uprev to u0

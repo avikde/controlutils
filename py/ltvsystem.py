@@ -83,6 +83,61 @@ class LTVSystem:
         assert Ci.shape[1] == self.polyBlocks[pbi][2]
         self.u[ioffs : ioffs + len(di)] = di
 
+    def updateTrajectory(self, x0, u0, trajMode):
+        """Returns a (N,nx)-shaped traj
+        
+        trajMode should be one of the constants in the group up top.
+
+        x0 --- either a (nx,) vector (current state) or an (N,nx) array with a given horizon (used with `trajMode=GIVEN_POINT_OR_TRAJ`). NOTE: when a horizon is provided, x0[0,:] must still have the current state.
+
+        u0 --- input to linearize around (does not matter in a lot of cases if the linearization does not depend on the input).
+        """
+        # Update the initial state
+        xlin = x0[0,:] if len(x0.shape) > 1 else x0
+        ulin = u0[0,:] if len(u0.shape) > 1 else u0
+        # Assumes that when a trajectory is provided, the first is the initial condition (see docstring)
+        self.l[:self.nx] = -xlin
+        self.u[:self.nx] = -xlin
+        
+        # First dynamics
+        dyn = self.m.getLinearDynamics(xlin, ulin)
+        Ad, Bd = dyn[0:2]
+        bAffine = len(dyn) > 2
+        
+        xtraj = np.zeros((self.N, self.nx))
+        for ti in range(self.N):
+            # Dynamics update in the equality constraint (also set xlin) --
+            # Get linearization point if it is provided
+            if trajMode == GIVEN_POINT_OR_TRAJ:
+                if len(x0.shape) > 1:
+                    xlin = x0[ti, :]
+                if len(u0.shape) > 1:
+                    ulin = u0[ti, :]
+            # Get linearization point by iterating a provided input
+            elif trajMode in [ITERATE_TRAJ] and ti > 0:
+                # update the point at which the next linearization will happen
+                xlin = self.m.dynamics(xlin, ulin)
+            elif trajMode == PREV_SOL_TRAJ:
+                # use the previous solution shifted by 1 timestep (till the end)
+                # NOTE: uses the end point twice (probably matters least then anyway)
+                prevSolIdx = self.nx * min(ti+1, self.N)  # index into prevSol
+                xlin = self.prevSol[prevSolIdx : prevSolIdx + self.nx]
+                
+            if ti > 0 and (trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ITERATE_TRAJ, PREV_SOL_TRAJ]:
+                # if a trajectory is provided or projected, need to get the newest linearization
+                dyn = self.m.getLinearDynamics(xlin, ulin)
+                Ad, Bd = dyn[0:2]
+            
+            # Place new Ad, Bd in Aeq
+            csc.updateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
+            # Update RHS of constraint
+            fd = dyn[2] if bAffine else np.zeros(self.nx)
+            self.l[self.nx * (ti+1) : self.nx * (ti+2)] = -fd
+            self.u[self.nx * (ti+1) : self.nx * (ti+2)] = -fd
+            # /dynamics update --
+            xtraj[ti, :] = xlin
+
+        return xtraj
 
 if __name__ == "__main__":
     print("Testing LTVSystem")

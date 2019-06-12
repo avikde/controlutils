@@ -13,6 +13,7 @@ class LTVSystem:
         self.nx = nx
         self.nu = nu
         self.N = N
+        self.polyBlocks = polyBlocks
 
         # Create the CSC A matrix manually.
         # conA = CondensedA(self.nx, self.nu, N, polyBlocks=polyBlocks)
@@ -35,6 +36,35 @@ class LTVSystem:
             self.u = np.hstack((self.u, np.full(Nctotal, np.inf)))
         
         return self.A, self.l, self.u
+    
+    def updateStateConstraint(self, ti, xidx, u=None, l=None):
+        '''Update a state constraint
+
+        The constraint added is l <= x(ti)[xidx] <= u
+        '''
+        # get to the ineq constraints
+        ioffs = self.nx * (self.N + 1 + ti)
+        if u is not None:
+            self.u[ioffs + xidx] = u
+        if l is not None:
+            self.l[ioffs + xidx] = l
+    
+    def updatePolyhedronConstraint(self, ti, pbi, Ci, di):
+        '''Update the polyhedron membership constraint for time i
+
+        The constraint added is Ci projection_pbi( x(ti) ) <= di
+
+        pbi = index into polyBlocks provided during init
+
+        To "remove" the constraint, just set di = np.full(*, np.inf)
+        '''
+        # Only C x <= d type constraints, so only change A and u
+        ioffs = csc.updatePolyBlock(self.A, self.nx, self.nu, self.N, ti, self.polyBlocks, pbi, Ci)
+        # update u, but not l (which stays at -inf)
+        assert Ci.shape[0] == len(di)
+        assert Ci.shape[0] == self.polyBlocks[pbi][1]
+        assert Ci.shape[1] == self.polyBlocks[pbi][2]
+        self.u[ioffs : ioffs + len(di)] = di
 
 
 if __name__ == "__main__":

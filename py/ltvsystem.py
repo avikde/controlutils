@@ -52,6 +52,7 @@ class LTVSystem:
             self.l = np.hstack((self.l, np.full(Nctotal, -np.inf)))
             self.u = np.hstack((self.u, np.full(Nctotal, np.inf)))
         
+        self.xtraj = np.zeros((self.N, self.nx))
         return self.A, self.l, self.u
     
     def updateStateConstraint(self, ti, xidx, u=None, l=None):
@@ -104,7 +105,6 @@ class LTVSystem:
         Ad, Bd = dyn[0:2]
         bAffine = len(dyn) > 2
         
-        xtraj = np.zeros((self.N, self.nx))
         for ti in range(self.N):
             # Dynamics update in the equality constraint (also set xlin) --
             # Get linearization point if it is provided
@@ -135,9 +135,9 @@ class LTVSystem:
             self.l[self.nx * (ti+1) : self.nx * (ti+2)] = -fd
             self.u[self.nx * (ti+1) : self.nx * (ti+2)] = -fd
             # /dynamics update --
-            xtraj[ti, :] = xlin
+            self.xtraj[ti, :] = xlin
 
-        return xtraj
+        return self.xtraj
 
 if __name__ == "__main__":
     print("Testing LTVSystem")

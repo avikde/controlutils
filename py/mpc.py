@@ -6,29 +6,6 @@ try:
 except:
     import csc, ltvsystem
 
-'''
-NOTE: Dimensions ---
-Ad = nx*nx, Bd = nx*nu
-Ax = (N+1)*nx * (N+1)*nx
-Bu = (N+1)*nx * N*nu
-Aeq = (N+1)*nx * ((N+1)*nx+N*nu)
-x = [y0, y1, ..., yN, u1, ..., uN] of size (N+1)*nx + N*nu
-After solving, apply u1 (MPC)
-# print(P.shape)
-# print(q.shape)
-# print(A.shape)
-# print(l.shape)
-# print(leq.shape)
-# print(lineq.shape)
-'''
-
-# CONSTANTS ---
-
-# Options for costMode
-FINAL = 0
-TRAJ = 1
-# /CONSTANTS --
-
 
 class LTVMPC:
     '''Interface that the provided "model" must provide:
@@ -60,36 +37,9 @@ class LTVMPC:
         # QP state: x = (y(0),y(1),...,y(N),u(0),...,u(N-1))
         # Dynamics and constraints
         x0 = np.zeros(self.nx) # Initial state will get updated
-        self.ltvsys.init(self.nx, self.nu, N, x0, polyBlocks=polyBlocks)
-
-        # Objective stuf ---
-        # store kdamping as a vector
-        if isinstance(kdamping, list):
-            self.kdamping = kdamping
-        else:
-            self.kdamping = np.full(self.nu, kdamping)
-        
-        # Objective function
-        self.Q = sparse.diags(wx)
-        self.QN = self.Q
-        self.R = sparse.diags(wu)
-
-        # - quadratic objective
-        self.P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN, self.R + sparse.diags(self.kdamping), sparse.kron(sparse.eye(N - 1), self.R)]).tocsc()
-        # After eliminating zero elements, since P is diagonal, the sparse format is particularly simple. If P is np x np, ...
-        self.P.eliminate_zeros()
-        szP = self.P.shape[0]
-        # the data array just corresponds to the diagonal elements
-        assert (self.P.indices == range(szP)).all()
-        assert (self.P.indptr == range(szP + 1)).all() 
-        # print(P.toarray(), P.data)
-
-        # make up single goal xr for now - will get updated. NOTE: q is not sparse so we can update all of it
-        xr = np.zeros_like(x0)
-        q = np.hstack([np.kron(np.ones(N), -self.Q @ xr), -self.QN @ xr, np.zeros(N*self.nu)])  # -uprev * damping goes in the u0 slot
-        # /---
-
-        self.ltvsys.initSolver(self.P, q, **settings)
+        self.ltvsys.initConstraints(self.nx, self.nu, N, x0, polyBlocks=polyBlocks)
+        self.ltvsys.initObjectiveTrajectoryError(wx, wu, kdamping)
+        self.ltvsys.initSolver(**settings)
 
         # Variables to store the previous result in
         self.ctrl = np.zeros(self.nu)
@@ -120,7 +70,7 @@ class LTVMPC:
         return trajMode, costMode
 
 
-    def update(self, x0, xr, u0=None, ur=None, trajMode=ltvsystem.GIVEN_POINT_OR_TRAJ, costMode=TRAJ, ugoalCost=False):
+    def update(self, x0, xr, u0=None, ur=None, trajMode=ltvsystem.GIVEN_POINT_OR_TRAJ, costMode=ltvsystem.TRAJ, ugoalCost=False):
         '''
         xr --- goal state (placed in the linear term of the objective)
 
@@ -139,33 +89,9 @@ class LTVMPC:
             u0 = self.ctrl  # use the previous control input
         
         xtraj = self.ltvsys.updateTrajectory(x0, u0, trajMode)
-        
-        # Update objective P,q ---
-        # Single point goal goes in cost (replaced below)
-        if ur is None:
-            ur = np.zeros(self.nu)
-        q = np.hstack([np.kron(np.ones(self.N), -self.Q @ xr), -self.QN @ xr, np.kron(np.ones(self.N), -self.R @ ur)])
-        if ugoalCost:
-            uoffs = (self.N+1)*self.nx  # offset into q where u0, u1, etc. terms appear
-            if len(u0.shape) > 1:
-                # print('hihihi', u0[0,:])
-                for ii in range(u0.shape[0]):
-                    q[uoffs + ii*self.nu:uoffs + (ii+1)*self.nu] = -self.R @ u0[ii,:]
-            else:
-                q[uoffs:uoffs + self.nu] = -self.R @ u0
+        self.ltvsys.updateObjectiveTrajectoryError(xr, ur, trajMode, costMode, u0=u0, udamp=self.ctrl, ugoalCost=ugoalCost)
 
-        for ti in range(self.N):
-            # Objective update in q --
-            if costMode == TRAJ and (trajMode == ltvsystem.GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ltvsystem.ITERATE_TRAJ, ltvsystem.PREV_SOL_TRAJ]:
-                # cost along each point
-                q[self.nx * ti:self.nx * (ti + 1)] = -self.Q @ xtraj[ti, :]
-            # /objective update
-
-        # add "damping" by penalizing changes from uprev to u0
-        q[-self.N*self.nu:-(self.N-1)*self.nu] -= np.multiply(self.kdamping, self.ctrl)
-        # /----
-
-        self.prevSol = self.ltvsys.solve(self.P.data, q)
+        self.prevSol = self.ltvsys.solve()
         # Apply first control input to the plant, and store
         self.ctrl = self.prevSol[-self.N*self.nu:-(self.N-1)*self.nu]
 

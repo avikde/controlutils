@@ -21,15 +21,28 @@ ITERATE_TRAJ = 1
 PREV_SOL_TRAJ = 2
 SQP = 4
 
+# Options for costMode
+FINAL = 0
+TRAJ = 1
+
 class LTVDirTran:
-    """This deals with the (LTV) dynamics, constraints, and trajectory"""
+    """This deals with the (LTV) dynamics, constraints, and trajectory
+    
+    NOTE: Dimensions ---
+    Ad = nx*nx, Bd = nx*nu
+    Ax = (N+1)*nx * (N+1)*nx
+    Bu = (N+1)*nx * N*nu
+    Aeq = (N+1)*nx * ((N+1)*nx+N*nu)
+    x = [y0, y1, ..., yN, u1, ..., uN] of size (N+1)*nx + N*nu
+    After solving, apply u1 (MPC)
+    """
 
     def __init__(self, model):
         self.m = model
         self.tqpsolve = np.nan
         self.niter = np.nan
 
-    def init(self, nx, nu, N, x0, polyBlocks=None, useModelLimits=True):
+    def initConstraints(self, nx, nu, N, x0, polyBlocks=None, useModelLimits=True):
         """Return A, l, u"""
         self.nx = nx
         self.nu = nu
@@ -66,7 +79,8 @@ class LTVDirTran:
             self.l = np.hstack((self.l, np.full(Nctotal, -np.inf)))
             self.u = np.hstack((self.u, np.full(Nctotal, np.inf)))
         
-        self.xtraj = np.zeros((self.N, self.nx))
+        # Array to store traj in x and u
+        self.xtraj = np.zeros((self.N, self.nx + self.nu))
         return self.A, self.l, self.u
     
     def updateStateConstraint(self, ti, xidx, u=None, l=None):
@@ -149,10 +163,57 @@ class LTVDirTran:
             self.l[self.nx * (ti+1) : self.nx * (ti+2)] = -fd
             self.u[self.nx * (ti+1) : self.nx * (ti+2)] = -fd
             # /dynamics update --
-            self.xtraj[ti, :] = xlin
+            self.xtraj[ti, :] = np.hstack((xlin, ulin))
 
         return self.xtraj
 
+    def initObjectiveTrajectoryError(self, wx, wu, kdamping=0):
+        # store kdamping as a vector
+        if isinstance(kdamping, list):
+            self.kdamping = kdamping
+        else:
+            self.kdamping = np.full(self.nu, kdamping)
+        
+        # Objective function
+        self.Q = sparse.diags(wx)
+        self.QN = self.Q
+        self.R = sparse.diags(wu)
+
+        # - quadratic objective
+        self.P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN, self.R + sparse.diags(self.kdamping), sparse.kron(sparse.eye(self.N - 1), self.R)]).tocsc()
+        # After eliminating zero elements, since P is diagonal, the sparse format is particularly simple. If P is np x np, ...
+        self.P.eliminate_zeros()
+        szP = self.P.shape[0]
+        # the data array just corresponds to the diagonal elements
+        assert (self.P.indices == range(szP)).all()
+        assert (self.P.indptr == range(szP + 1)).all() 
+        # print(P.toarray(), P.data)
+
+        # make up single goal xr for now - will get updated. NOTE: q is not sparse so we can update all of it
+        xr = np.zeros(self.nx)
+        self.q = np.hstack([np.kron(np.ones(self.N), -self.Q @ xr), -self.QN @ xr, np.zeros(self.N*self.nu)])  # -uprev * damping goes in the u0 slot
+
+    def updateObjectiveTrajectoryError(self, xr, ur, trajMode, costMode, u0=None, udamp=None, ugoalCost=False):
+        """Takes in the output of updateTrajectory"""
+
+        # Single point goal goes in cost (replaced below)
+        if ur is None:
+            ur = np.zeros(self.nu)
+        self.q = np.hstack([np.kron(np.ones(self.N), -self.Q @ xr), -self.QN @ xr, np.kron(np.ones(self.N), -self.R @ ur)])
+        if ugoalCost and u0 is not None:
+            uoffs = (self.N+1)*self.nx  # offset into q where u0, u1, etc. terms appear
+            for ii in range(u0.shape[0]):
+                self.q[uoffs + ii*self.nu:uoffs + (ii+1)*self.nu] = -self.R @ u0[ii,:]
+
+        for ti in range(self.N):
+            # Objective update in q --
+            if costMode == TRAJ and (trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ITERATE_TRAJ, PREV_SOL_TRAJ]:
+                # cost along each point
+                self.q[self.nx * ti:self.nx * (ti + 1)] = -self.Q @ self.xtraj[ti, :self.nx]
+            # /objective update
+
+        # add "damping" by penalizing changes from uprev to u0
+        self.q[-self.N*self.nu:-(self.N-1)*self.nu] -= np.multiply(self.kdamping, udamp)
 
 class LTVSolver(LTVDirTran):
     """Combine LTV dynamics with the solver"""
@@ -162,12 +223,12 @@ class LTVSolver(LTVDirTran):
     MAX_ULIM_VIOL_FRAC = None
     # /parameters
 
-    def initSolver(self, P, q, **settings):
+    def initSolver(self, **settings):
         # Create an OSQP object
         self.prob = osqp.OSQP()
         # Full so that it is not made sparse. prob.update() cannot change the sparsity structure
         # Setup workspace
-        self.prob.setup(P, q, self.A, self.l, self.u, warm_start=True, **settings)#, eps_abs=1e-05, eps_rel=1e-05
+        self.prob.setup(self.P, self.q, self.A, self.l, self.u, warm_start=True, **settings)#, eps_abs=1e-05, eps_rel=1e-05
         
 
     def debugResult(self, res):
@@ -194,11 +255,11 @@ class LTVSolver(LTVDirTran):
             # https://osqp.org/docs/interfaces/status_values.html
             print('Try increasing max_iter to see if it can be solved more accurately')
     
-    def solve(self, Pdata, q):
+    def solve(self):
         
         # Update
         t0 = time.perf_counter()
-        self.prob.update(l=self.l, u=self.u, q=q, Ax=self.A.data, Px=Pdata)
+        self.prob.update(l=self.l, u=self.u, q=self.q, Ax=self.A.data, Px=self.P.data)
         # print(A.data.shape)
 
         # Solve

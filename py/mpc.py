@@ -92,12 +92,16 @@ class LTVMPC:
         # Create an OSQP object
         self.prob = osqp.OSQP()
         
+        # QP state: x = (y(0),y(1),...,y(N),u(0),...,u(N-1))
+        # Dynamics and constraints
+        x0 = np.zeros(self.nx) # Initial state will get updated
+        self.A, self.l, self.u = self.ltvsys.init(self.nx, self.nu, N, x0, self.xmin, self.xmax, self.umin, self.umax, polyBlocks=polyBlocks)
+        
         # Objective function
         self.Q = sparse.diags(wx)
         self.QN = self.Q
         self.R = sparse.diags(wu)
 
-        # Cast MPC problem to a QP: x = (x(0),x(1),...,x(N),u(0),...,u(N-1))
         # - quadratic objective
         self.P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN, self.R + sparse.diags(self.kdamping), sparse.kron(sparse.eye(N - 1), self.R)]).tocsc()
         # After eliminating zero elements, since P is diagonal, the sparse format is particularly simple. If P is np x np, ...
@@ -107,29 +111,10 @@ class LTVMPC:
         assert (self.P.indices == range(szP)).all()
         assert (self.P.indptr == range(szP + 1)).all() 
         # print(P.toarray(), P.data)
-        # - input and state constraints
-        lineq = np.hstack([np.kron(np.ones(N+1), self.xmin), np.kron(np.ones(N), self.umin)])
-        uineq = np.hstack([np.kron(np.ones(N+1), self.xmax), np.kron(np.ones(N), self.umax)])
 
-        # Create the CSC A matrix manually.
-        # conA = CondensedA(self.nx, self.nu, N, polyBlocks=polyBlocks)
-        conA = csc.init(self.nx, self.nu, N, polyBlocks=polyBlocks)
-        self.A = sparse.csc_matrix((conA.data, conA.indices, conA.indptr))
         # make up single goal xr for now - will get updated. NOTE: q is not sparse so we can update all of it
-        xr = np.zeros(self.nx)
-        x0 = np.zeros_like(xr)
+        xr = np.zeros_like(x0)
         q = np.hstack([np.kron(np.ones(N), -self.Q @ xr), -self.QN @ xr, np.zeros(N*self.nu)])  # -uprev * damping goes in the u0 slot
-        # Initial state will get updated
-        leq = np.hstack([-x0, np.zeros(self.N*self.nx)])
-        ueq = leq
-        self.l = np.hstack([leq, lineq])
-        self.u = np.hstack([ueq, uineq])
-        if polyBlocks is not None:
-            # Add corresponding RHS elements for polyhedron membership
-            # Only C x <= d type constraints
-            Nctotal = self.A.shape[0] - len(self.l)
-            self.l = np.hstack((self.l, np.full(Nctotal, -np.inf)))
-            self.u = np.hstack((self.u, np.full(Nctotal, np.inf)))
         
         # Full so that it is not made sparse. prob.update() cannot change the sparsity structure
         # Setup workspace

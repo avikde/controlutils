@@ -270,7 +270,7 @@ class LTVSolver(LTVDirTran):
 
         # Check solver status
         if res.info.status != 'solved':
-            print('Current y,u:', x0, u0)
+            # print('Current y,u:', x0, u0)
             self.debugResult(res)
             raise ValueError(res.info.status)
         else:

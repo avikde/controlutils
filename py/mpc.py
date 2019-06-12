@@ -49,9 +49,9 @@ class LTVMPC:
     MAX_ULIM_VIOL_FRAC = None
     # /parameters
 
-    def __init__(self, model, N, wx, wu, kdamping=0, polyBlocks=None, **settings):
+    def __init__(self, ltvsystem, N, wx, wu, kdamping=0, polyBlocks=None, **settings):
         '''
-        model = model class with dynamics(), 
+        ltvsystem = model class with dynamics(), 
         property `limits`
         getLinearDynamics() (TBD)
 
@@ -65,7 +65,7 @@ class LTVMPC:
         '''
         self.tqpsolve = np.nan
         self.niter = np.nan
-        self.m = model
+        self.m = ltvsystem
         self.N = N
         # store dims
         self.nx = len(wx)
@@ -79,8 +79,8 @@ class LTVMPC:
         self.polyBlocks = polyBlocks
 
         # Constraints
-        if hasattr(model, 'limits'):
-            self.umin, self.umax, self.xmin, self.xmax = model.limits
+        if hasattr(self.m, 'limits'):
+            self.umin, self.umax, self.xmin, self.xmax = self.m.limits
         else:
             # unconstrained
             self.umin = np.full(len(wu), -np.inf)

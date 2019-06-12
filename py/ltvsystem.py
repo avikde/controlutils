@@ -2,6 +2,23 @@ import autograd.numpy as np
 import scipy.sparse as sparse
 from . import csc
 
+"""
+What to use over the horizon during the MPC update (see docstring of update) ---
+trajMode --- 
+
+`GIVEN_POINT_OR_TRAJ`: if a single goal point is given in x0, use linearization at that point, or if a trajectory is given in x0, use the linearization at each knot point
+
+`ITERATE_TRAJ`: apply the current or provided input u0 recursively to produce a trajectory. Warning: this can produce bad trajectories for complicated dynamics
+
+`PREV_SOL_TRAJ`: Use the x1, ..., xN from the previous run
+
+`SQP` i.e. sequential QP: take the first solution, get a traj, and then linearize around that and rinse repeat (before actually taking a control action in the sim)
+"""
+GIVEN_POINT_OR_TRAJ = 0
+ITERATE_TRAJ = 1
+PREV_SOL_TRAJ = 2
+SQP = 4
+
 class LTVSystem:
     """This deals with the (LTV) dynamics and constraints"""
 

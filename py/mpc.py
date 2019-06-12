@@ -26,12 +26,6 @@ After solving, apply u1 (MPC)
 
 # CONSTANTS ---
 
-# What to use over the horizon during the MPC update (see docstring of update) ---
-GIVEN_POINT_OR_TRAJ = 0
-ITERATE_TRAJ = 1
-PREV_SOL_TRAJ = 2
-SQP = 4
-
 # Options for costMode
 FINAL = 0
 TRAJ = 1
@@ -94,7 +88,7 @@ class LTVMPC:
         # QP state: x = (y(0),y(1),...,y(N),u(0),...,u(N-1))
         # Dynamics and constraints
         x0 = np.zeros(self.nx) # Initial state will get updated
-        self.A, self.l, self.u = self.ltvsys.init(self.nx, self.nu, N, x0, self.xmin, self.xmax, self.umin, self.umax, polyBlocks=polyBlocks)
+        self.ltvsys.init(self.nx, self.nu, N, x0, self.xmin, self.xmax, self.umin, self.umax, polyBlocks=polyBlocks)
         
         # Objective function
         self.Q = sparse.diags(wx)
@@ -117,7 +111,7 @@ class LTVMPC:
         
         # Full so that it is not made sparse. prob.update() cannot change the sparsity structure
         # Setup workspace
-        self.prob.setup(self.P, q, self.A, self.l, self.u, warm_start=True, **settings)#, eps_abs=1e-05, eps_rel=1e-05
+        self.prob.setup(self.P, q, self.ltvsys.A, self.ltvsys.l, self.ltvsys.u, warm_start=True, **settings)#, eps_abs=1e-05, eps_rel=1e-05
 
         # Variables to store the previous result in
         self.ctrl = np.zeros(self.nu)
@@ -158,21 +152,21 @@ class LTVMPC:
     def _sanitizeTrajAndCostModes(self, trajMode, costMode, x0):
         '''Test if these modes all make sense'''
 
-        if trajMode == SQP:
+        if trajMode == ltvsystem.SQP:
             raise 'Not implemented'
         
         # if this is the first time, cannot use the previous solution
-        if self.prevSol is None and trajMode == PREV_SOL_TRAJ:
-            trajMode = GIVEN_POINT_OR_TRAJ
+        if self.prevSol is None and trajMode == ltvsystem.PREV_SOL_TRAJ:
+            trajMode = ltvsystem.GIVEN_POINT_OR_TRAJ
 
         # If there is no trajectory, then the cost can only take the final point
-        if trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) == 1 and costMode == TRAJ:
+        if trajMode == ltvsystem.GIVEN_POINT_OR_TRAJ and len(x0.shape) == 1 and costMode == TRAJ:
             costMode = FINAL
             
         return trajMode, costMode
 
 
-    def update(self, x0, xr, u0=None, ur=None, trajMode=GIVEN_POINT_OR_TRAJ, costMode=TRAJ, ugoalCost=False):
+    def update(self, x0, xr, u0=None, ur=None, trajMode=ltvsystem.GIVEN_POINT_OR_TRAJ, costMode=TRAJ, ugoalCost=False):
         '''trajMode should be one of the constants in the group up top.
 
         x0 --- either a (nx,) vector (current state) or an (N,nx) array with a given horizon (used with `trajMode=GIVEN_POINT_OR_TRAJ`). NOTE: when a horizon is provided, x0[0,:] must still have the current state.
@@ -182,16 +176,6 @@ class LTVMPC:
         u0 --- input to linearize around (does not matter in a lot of cases if the linearization does not depend on the input).
 
         ur --- input to make cost around
-
-        trajMode --- 
-
-        `GIVEN_POINT_OR_TRAJ`: if a single goal point is given in x0, use linearization at that point, or if a trajectory is given in x0, use the linearization at each knot point
-
-        `ITERATE_TRAJ`: apply the current or provided input u0 recursively to produce a trajectory. Warning: this can produce bad trajectories for complicated dynamics
-
-        `PREV_SOL_TRAJ`: Use the x1, ..., xN from the previous run
-
-        `SQP` i.e. sequential QP: take the first solution, get a traj, and then linearize around that and rinse repeat (before actually taking a control action in the sim)
         
         costMode --- if FINAL, only xr (at the end of the horizon) contributes to the cost. If TRAJ, each point in the provided or constructed trajectory (see trajMode) contributes.
 
@@ -210,8 +194,8 @@ class LTVMPC:
         xlin = x0[0,:] if len(x0.shape) > 1 else x0
         ulin = u0[0,:] if len(u0.shape) > 1 else u0
         # Assumes that when a trajectory is provided, the first is the initial condition (see docstring)
-        self.l[:self.nx] = -xlin
-        self.u[:self.nx] = -xlin
+        self.ltvsys.l[:self.nx] = -xlin
+        self.ltvsys.u[:self.nx] = -xlin
         
         # Single point goal goes in cost (replaced below)
         if ur is None:
@@ -234,36 +218,36 @@ class LTVMPC:
         for ti in range(self.N):
             # Dynamics update in the equality constraint (also set xlin) --
             # Get linearization point if it is provided
-            if trajMode == GIVEN_POINT_OR_TRAJ:
+            if trajMode == ltvsystem.GIVEN_POINT_OR_TRAJ:
                 if len(x0.shape) > 1:
                     xlin = x0[ti, :]
                 if len(u0.shape) > 1:
                     ulin = u0[ti, :]
             # Get linearization point by iterating a provided input
-            elif trajMode in [ITERATE_TRAJ] and ti > 0:
+            elif trajMode in [ltvsystem.ITERATE_TRAJ] and ti > 0:
                 # update the point at which the next linearization will happen
                 xlin = self.m.dynamics(xlin, ulin)
-            elif trajMode == PREV_SOL_TRAJ:
+            elif trajMode == ltvsystem.PREV_SOL_TRAJ:
                 # use the previous solution shifted by 1 timestep (till the end)
                 # NOTE: uses the end point twice (probably matters least then anyway)
                 prevSolIdx = self.nx * min(ti+1, self.N)  # index into prevSol
                 xlin = self.prevSol[prevSolIdx : prevSolIdx + self.nx]
                 
-            if ti > 0 and (trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ITERATE_TRAJ, PREV_SOL_TRAJ]:
+            if ti > 0 and (trajMode == ltvsystem.GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ltvsystem.ITERATE_TRAJ, ltvsystem.PREV_SOL_TRAJ]:
                 # if a trajectory is provided or projected, need to get the newest linearization
                 dyn = self.m.getLinearDynamics(xlin, ulin)
                 Ad, Bd = dyn[0:2]
             
             # Place new Ad, Bd in Aeq
-            csc.updateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
+            csc.updateDynamics(self.ltvsys.A, self.N, ti, Ad=Ad, Bd=Bd)
             # Update RHS of constraint
             fd = dyn[2] if bAffine else np.zeros(self.nx)
-            self.l[self.nx * (ti+1) : self.nx * (ti+2)] = -fd
-            self.u[self.nx * (ti+1) : self.nx * (ti+2)] = -fd
+            self.ltvsys.l[self.nx * (ti+1) : self.nx * (ti+2)] = -fd
+            self.ltvsys.u[self.nx * (ti+1) : self.nx * (ti+2)] = -fd
             # /dynamics update --
 
             # Objective update in q --
-            if costMode == TRAJ and (trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ITERATE_TRAJ, PREV_SOL_TRAJ]:
+            if costMode == TRAJ and (trajMode == ltvsystem.GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ltvsystem.ITERATE_TRAJ, ltvsystem.PREV_SOL_TRAJ]:
                 # cost along each point
                 q[self.nx * ti:self.nx * (ti + 1)] = -self.Q @ xlin
             # /objective update
@@ -273,7 +257,7 @@ class LTVMPC:
             
         # Update
         t0 = time.perf_counter()
-        self.prob.update(l=self.l, u=self.u, q=q, Ax=self.A.data, Px=self.P.data)
+        self.prob.update(l=self.ltvsys.l, u=self.ltvsys.u, q=q, Ax=self.ltvsys.A.data, Px=self.P.data)
         # print(A.data.shape)
 
         # Solve

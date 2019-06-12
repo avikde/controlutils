@@ -38,7 +38,7 @@ class LTVDirTran:
 
         # Constraints
         if hasattr(self.m, 'limits') and useModelLimits:
-            self.umin, self.umax, self.xmin, self.xmax = self.ltvsystem.m.limits
+            self.umin, self.umax, self.xmin, self.xmax = self.m.limits
         else:
             # unconstrained
             self.umin = np.full(nu, -np.inf)

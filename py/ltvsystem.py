@@ -154,8 +154,8 @@ class LTVDirTran:
         return self.xtraj
 
 
-class LTVSystem(LTVDirTran):
-    """Combine LTV dynamics with some aspects of objective"""
+class LTVSolver(LTVDirTran):
+    """Combine LTV dynamics with the solver"""
     
     # Parameters that could be modified --
     # If returned u violated umin/umax by a fraction (this is useful for systems with small input magnitudes and large tolerance)

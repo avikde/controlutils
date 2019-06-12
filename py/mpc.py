@@ -50,7 +50,7 @@ class LTVMPC:
         
         polyBlocks: see csc.init for help on specifying polyBlocks
         '''
-        self.ltvsys = ltvsystem.LTVSystem(model)
+        self.ltvsys = ltvsystem.LTVSolver(model)
         # TODO: eliminate; in ltvsys
         self.N = N
         # store dims

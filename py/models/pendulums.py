@@ -2,8 +2,11 @@
 Pendulum models for testing controls stuff
 """
 import autograd.numpy as np
-from ..model import Model
-
+try:
+    from ..model import Model
+except:
+    from model import Model
+    
 # common parameters
 g = 9.81
 

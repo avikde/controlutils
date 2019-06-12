@@ -4,9 +4,9 @@ import osqp
 import sys
 import time
 try:
-    from . import csc
+    from . import csc, ltvsystem
 except:
-    import csc
+    import csc, ltvsystem
 
 '''
 NOTE: Dimensions ---
@@ -49,9 +49,9 @@ class LTVMPC:
     MAX_ULIM_VIOL_FRAC = None
     # /parameters
 
-    def __init__(self, ltvsystem, N, wx, wu, kdamping=0, polyBlocks=None, **settings):
+    def __init__(self, model, N, wx, wu, kdamping=0, polyBlocks=None, **settings):
         '''
-        ltvsystem = model class with dynamics(), 
+        model = model class with dynamics(), 
         property `limits`
         getLinearDynamics() (TBD)
 
@@ -65,7 +65,8 @@ class LTVMPC:
         '''
         self.tqpsolve = np.nan
         self.niter = np.nan
-        self.m = ltvsystem
+        self.m = model
+        self.ltvsys = ltvsystem.LTVSystem(model)
         self.N = N
         # store dims
         self.nx = len(wx)

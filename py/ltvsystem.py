@@ -1,7 +1,10 @@
 import autograd.numpy as np
 import scipy.sparse as sparse
+import csc
 
 class LTVSystem:
+    """This deals with the (LTV) dynamics and constraints"""
+
     def __init__(self, model):
         pass
 

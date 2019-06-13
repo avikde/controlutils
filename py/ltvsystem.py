@@ -322,7 +322,10 @@ class LTVSolver(LTVDirTran):
                     print('[mpc] warning: violated ulim ratio. Worst violation: ', worstViolation, 'new eps =', newEps)
                     self.prob.update_settings(eps_rel=newEps, eps_abs=newEps)
 
-        return res.x if throwOnError else res.x, res
+        if throwOnError:
+            return res.x
+        else:
+            return res.x, res
 
 if __name__ == "__main__":
     print("Testing LTVSystem")

@@ -286,8 +286,8 @@ class LTVSolver(LTVDirTran):
             # https://osqp.org/docs/interfaces/status_values.html
             print('Try increasing max_iter to see if it can be solved more accurately')
     
-    def solve(self):
-        
+    def solve(self, throwOnError=True):
+        """throwOnError = true => Will throw if status is not solved"""
         # Update
         t0 = time.perf_counter()
         self.prob.update(l=self.l, u=self.u, q=self.q, Ax=self.A.data, Px=self.P.data)
@@ -300,7 +300,7 @@ class LTVSolver(LTVDirTran):
         self.niter = res.info.iter
 
         # Check solver status
-        if res.info.status != 'solved':
+        if res.info.status != 'solved' and throwOnError:
             # print('Current y,u:', x0, u0)
             self.debugResult(res)
             raise ValueError(res.info.status)

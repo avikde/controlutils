@@ -38,7 +38,7 @@ class LTVMPC:
         # Dynamics and constraints
         x0 = np.zeros(self.nx) # Initial state will get updated
         self.ltvsys.initConstraints(self.nx, self.nu, N, x0, polyBlocks=polyBlocks)
-        self.ltvsys.initObjectiveTrajectoryError(wx, wu, kdamping)
+        self.ltvsys.initObjective(ltvsystem.QOFTrajectoryError(wx, wu, kdamping))
         self.ltvsys.initSolver(**settings)
 
         # Variables to store the previous result in
@@ -89,7 +89,7 @@ class LTVMPC:
             u0 = self.ctrl  # use the previous control input
         
         xtraj = self.ltvsys.updateTrajectory(x0, u0, trajMode)
-        self.ltvsys.updateObjectiveTrajectoryError(xr, ur, trajMode, costMode, u0=u0, udamp=self.ctrl, ugoalCost=ugoalCost)
+        self.ltvsys.updateObjective(xr=xr, ur=ur, trajMode=trajMode, costMode=costMode, u0=u0, udamp=self.ctrl, ugoalCost=ugoalCost)
 
         self.prevSol = self.ltvsys.solve()
         # Apply first control input to the plant, and store

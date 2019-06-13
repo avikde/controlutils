@@ -25,6 +25,66 @@ SQP = 4
 FINAL = 0
 TRAJ = 1
 
+# Prototype for quadratic objective functions
+class QOFTrajectoryError:
+    def __init__(self, wx, wu, kdamping=0):
+        # store kdamping as a vector
+        if isinstance(kdamping, list):
+            self.kdamping = kdamping
+        else:
+            self.kdamping = np.full(len(wu), kdamping)
+        
+        # Objective function
+        self.Q = sparse.diags(wx)
+        self.QN = self.Q
+        self.R = sparse.diags(wu)
+
+        self.firstTime = True
+
+    def getPq(self, xtraj, xr=None, ur=None, trajMode=ITERATE_TRAJ, costMode=TRAJ, u0=None, udamp=None, ugoalCost=False):
+        """Must return P (Hessian in sparse form), q (vector Jacobian)"""
+        N = xtraj.shape[0]
+        nx = self.Q.shape[0]
+        nu = self.R.shape[0]
+
+        # FIXME: combine these
+        if self.firstTime:
+            # - quadratic objective
+            self.P = sparse.block_diag([sparse.kron(sparse.eye(N), self.Q), self.QN, self.R + sparse.diags(self.kdamping), sparse.kron(sparse.eye(N - 1), self.R)]).tocsc()
+            # After eliminating zero elements, since P is diagonal, the sparse format is particularly simple. If P is np x np, ...
+            self.P.eliminate_zeros()
+            szP = self.P.shape[0]
+            # the data array just corresponds to the diagonal elements
+            assert (self.P.indices == range(szP)).all()
+            assert (self.P.indptr == range(szP + 1)).all() 
+            # print(P.toarray(), P.data)
+
+            # make up single goal xr for now - will get updated. NOTE: q is not sparse so we can update all of it
+            xr = np.zeros(nx)
+            self.q = np.hstack([np.kron(np.ones(N), -self.Q @ xr), -self.QN @ xr, np.zeros(N*nu)])  # -uprev * damping goes in the u0 slot
+
+            self.firstTime = False
+        else:
+            # Single point goal goes in cost (replaced below)
+            if ur is None:
+                ur = np.zeros(nu)
+            self.q = np.hstack([np.kron(np.ones(N), -self.Q @ xr), -self.QN @ xr, np.kron(np.ones(N), -self.R @ ur)])
+            if ugoalCost and u0 is not None:
+                uoffs = (N+1)*nx  # offset into q where u0, u1, etc. terms appear
+                for ii in range(u0.shape[0]):
+                    self.q[uoffs + ii*nu:uoffs + (ii+1)*nu] = -self.R @ u0[ii,:]
+
+            for ti in range(N):
+                # FIXME: need to look through and make sense of these modes
+                if costMode == TRAJ and (trajMode == GIVEN_POINT_OR_TRAJ) or trajMode in [ITERATE_TRAJ, PREV_SOL_TRAJ]:
+                    # cost along each point
+                    self.q[nx * ti:nx * (ti + 1)] = -self.Q @ xtraj[ti, :nx]
+
+            # add "damping" by penalizing changes from uprev to u0
+            self.q[-N*nu:-(N-1)*nu] -= np.multiply(self.kdamping, udamp)
+        return self.P, self.q
+
+
 class LTVDirTran:
     """This deals with the (LTV) dynamics, constraints, and trajectory
     
@@ -167,52 +227,15 @@ class LTVDirTran:
 
         return self.xtraj
 
-    def initObjectiveTrajectoryError(self, wx, wu, kdamping=0):
-        # store kdamping as a vector
-        if isinstance(kdamping, list):
-            self.kdamping = kdamping
-        else:
-            self.kdamping = np.full(self.nu, kdamping)
+    def initObjective(self, qof, **kwargs):
+        self.qof = qof
+        # Call once with the zero initial traj to set things up
+        self.P, self.q = self.qof.getPq(self.xtraj, **kwargs)
+
+    def updateObjective(self, **kwargs):
+        # Call once with the zero initial traj to set things up
+        self.P, self.q = self.qof.getPq(self.xtraj, **kwargs)
         
-        # Objective function
-        self.Q = sparse.diags(wx)
-        self.QN = self.Q
-        self.R = sparse.diags(wu)
-
-        # - quadratic objective
-        self.P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN, self.R + sparse.diags(self.kdamping), sparse.kron(sparse.eye(self.N - 1), self.R)]).tocsc()
-        # After eliminating zero elements, since P is diagonal, the sparse format is particularly simple. If P is np x np, ...
-        self.P.eliminate_zeros()
-        szP = self.P.shape[0]
-        # the data array just corresponds to the diagonal elements
-        assert (self.P.indices == range(szP)).all()
-        assert (self.P.indptr == range(szP + 1)).all() 
-        # print(P.toarray(), P.data)
-
-        # make up single goal xr for now - will get updated. NOTE: q is not sparse so we can update all of it
-        xr = np.zeros(self.nx)
-        self.q = np.hstack([np.kron(np.ones(self.N), -self.Q @ xr), -self.QN @ xr, np.zeros(self.N*self.nu)])  # -uprev * damping goes in the u0 slot
-
-    def updateObjectiveTrajectoryError(self, xr, ur, trajMode, costMode, u0=None, udamp=None, ugoalCost=False):
-        """Takes in the output of updateTrajectory"""
-
-        # Single point goal goes in cost (replaced below)
-        if ur is None:
-            ur = np.zeros(self.nu)
-        self.q = np.hstack([np.kron(np.ones(self.N), -self.Q @ xr), -self.QN @ xr, np.kron(np.ones(self.N), -self.R @ ur)])
-        if ugoalCost and u0 is not None:
-            uoffs = (self.N+1)*self.nx  # offset into q where u0, u1, etc. terms appear
-            for ii in range(u0.shape[0]):
-                self.q[uoffs + ii*self.nu:uoffs + (ii+1)*self.nu] = -self.R @ u0[ii,:]
-
-        for ti in range(self.N):
-            # FIXME: need to look through and make sense of these modes
-            if costMode == TRAJ and (trajMode == GIVEN_POINT_OR_TRAJ) or trajMode in [ITERATE_TRAJ, PREV_SOL_TRAJ]:
-                # cost along each point
-                self.q[self.nx * ti:self.nx * (ti + 1)] = -self.Q @ self.xtraj[ti, :self.nx]
-
-        # add "damping" by penalizing changes from uprev to u0
-        self.q[-self.N*self.nu:-(self.N-1)*self.nu] -= np.multiply(self.kdamping, udamp)
 
 class LTVSolver(LTVDirTran):
     """Combine LTV dynamics with the solver"""

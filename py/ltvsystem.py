@@ -83,6 +83,14 @@ class QOFTrajectoryError:
             # add "damping" by penalizing changes from uprev to u0
             self.q[-N*nu:-(N-1)*nu] -= np.multiply(self.kdamping, udamp)
         return self.P, self.q
+        
+    def updateWeights(self, wx=None, wu=None):
+        if wx is not None:
+            # diagonal elements of P
+            self.P.data[:(self.N + 1)*self.nx] = np.tile(wx, self.N + 1)
+        if wu is not None:
+            self.P.data[-self.N*self.nu:] = np.hstack((self.kdamping + np.array(wu), np.tile(wu, self.N - 1)))
+            self.R = sparse.diags(wu)
 
 
 class LTVDirTran:
@@ -102,7 +110,7 @@ class LTVDirTran:
         self.tqpsolve = np.nan
         self.niter = np.nan
 
-    def initConstraints(self, nx, nu, N, x0, polyBlocks=None, useModelLimits=True):
+    def initConstraints(self, nx, nu, N, polyBlocks=None, useModelLimits=True):
         """Return A, l, u"""
         self.nx = nx
         self.nu = nu
@@ -128,6 +136,7 @@ class LTVDirTran:
         lineq = np.hstack([np.kron(np.ones(N+1), self.xmin), np.kron(np.ones(N), self.umin)])
         uineq = np.hstack([np.kron(np.ones(N+1), self.xmax), np.kron(np.ones(N), self.umax)])
         
+        x0 = np.zeros(nx) # will get updated
         leq = np.hstack([-x0, np.zeros(N*self.nx)])
         ueq = leq
         self.l = np.hstack([leq, lineq])

@@ -28,30 +28,19 @@ class LTVMPC:
         polyBlocks: see csc.init for help on specifying polyBlocks
         '''
         self.ltvsys = ltvsystem.LTVSolver(model)
-        # TODO: eliminate; in ltvsys
-        self.N = N
-        # store dims
-        self.nx = len(wx)
-        self.nu = len(wu)
+        
+        nx = len(wx)
+        nu = len(wu)
         
         # QP state: x = (y(0),y(1),...,y(N),u(0),...,u(N-1))
         # Dynamics and constraints
-        x0 = np.zeros(self.nx) # Initial state will get updated
-        self.ltvsys.initConstraints(self.nx, self.nu, N, x0, polyBlocks=polyBlocks)
+        self.ltvsys.initConstraints(nx, nu, N, polyBlocks=polyBlocks)
         self.ltvsys.initObjective(ltvsystem.QOFTrajectoryError(wx, wu, kdamping))
         self.ltvsys.initSolver(**settings)
 
         # Variables to store the previous result in
-        self.ctrl = np.zeros(self.nu)
+        self.ctrl = np.zeros(nu)
         self.prevSol = None
-
-    def updateWeights(self, wx=None, wu=None):
-        if wx is not None:
-            # diagonal elements of P
-            self.P.data[:(self.N + 1)*self.nx] = np.tile(wx, self.N + 1)
-        if wu is not None:
-            self.P.data[-self.N*self.nu:] = np.hstack((self.kdamping + np.array(wu), np.tile(wu, self.N - 1)))
-            self.R = sparse.diags(wu)
     
     def _sanitizeTrajAndCostModes(self, trajMode, costMode, x0):
         '''Test if these modes all make sense'''
@@ -93,7 +82,7 @@ class LTVMPC:
 
         self.prevSol = self.ltvsys.solve()
         # Apply first control input to the plant, and store
-        self.ctrl = self.prevSol[-self.N*self.nu:-(self.N-1)*self.nu]
+        self.ctrl = self.prevSol[-self.ltvsys.N*self.ltvsys.nu:-(self.ltvsys.N-1)*self.ltvsys.nu]
 
         return self.ctrl
 

@@ -10,7 +10,7 @@ class Model:
     dt = 0.1
 
     @abstractmethod
-    def dynamics(self, y, u):
+    def dydt(self, y, u):
         """Continuous dynamics ydot = f(y, u)"""
         raise NotImplementedError()
 
@@ -18,8 +18,8 @@ class Model:
         # check inputs
         y0 = np.asarray(y0)
         u0 = np.asarray(u0)
-        dfdy = jacobian(lambda y: self.dynamics(y, u0))
-        dfdu = jacobian(lambda u: self.dynamics(y0, u))
+        dfdy = jacobian(lambda y: self.dydt(y, u0))
+        dfdu = jacobian(lambda u: self.dydt(y0, u))
         return dfdy, dfdu
     
     def autoLin(self, y0, u0):
@@ -30,7 +30,7 @@ class Model:
         A = dfdy(y0)
         B = dfdu(u0)
         # add affine term so that linear dynamics can be projected forward
-        return A, B, self.dynamics(y0, u0) - A @ y0 - B @ u0
+        return A, B, self.dydt(y0, u0) - A @ y0 - B @ u0
         
     
     def autoDLin(self, y0, u0):

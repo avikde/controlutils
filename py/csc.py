@@ -56,10 +56,11 @@ def updateElem(obj, i, j, val):
 
 def updateDynamics(obj, N, ti, Ad=None, Bd=None):
     '''Pass a block to update, and a matrix to go in that block, and it will update all the elements in that block.
-    At ti=0, this updates the block equation for x1 = Ad x0 + Bd u0 [+ fd].
+    At ti=0, this updates the block equation for x1 = A0 x0 + B0 u0 [+ c0], 
+    and at ti=N, x[N+1] = AN xN + BN uN [+ cN]
+    Note that since this only deals with the constrain "A" matrix, the affine part ci must be updated separately.
     '''
-
-    assert ti < N
+    assert ti <= N
     
     if Ad is not None:
         nx = Ad.shape[0]

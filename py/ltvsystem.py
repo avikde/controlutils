@@ -226,7 +226,9 @@ class LTVDirTran:
                 Ad, Bd = dyn[0:2]
             
             # Place new Ad, Bd in Aeq
-            csc.updateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
+            numUpdated = csc.updateDynamics(self.A, self.N, ti, Ad=Ad, Bd=Bd)
+            # Debugging: make sure both A, B were updated
+            assert numUpdated == self.nx * (self.nx + self.nu)
             # Update RHS of constraint
             fd = dyn[2] if bAffine else np.zeros(self.nx)
             self.l[self.nx * (ti+1) : self.nx * (ti+2)] = -fd

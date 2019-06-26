@@ -38,7 +38,8 @@ def init(nx, nu, N, polyBlocks=None):
 
 def updateElem(obj, i, j, val):
     '''Will update an element; do nothing if that entry is zero
-    Works on scipy sparse as well as CondensedA
+    Works on scipy sparse as well as CondensedA.
+    Returns 0 if nothing was updated (element was 0 in the sparse matrix), or 1 if updated successfully.
     '''
 
     # indptr has #cols elements, and the entry is the index into data/indices for the first element of that column
@@ -51,28 +52,32 @@ def updateElem(obj, i, j, val):
     while offs < maxOffsThisCol:
         if obj.indices[offs] == i:
             obj.data[offs] = val
-            return
+            return 1
         offs += 1
+    return 0
 
 def updateDynamics(obj, N, ti, Ad=None, Bd=None):
     '''Pass a block to update, and a matrix to go in that block, and it will update all the elements in that block.
-    At ti=0, this updates the block equation for x1 = A0 x0 + B0 u0 [+ c0], 
-    and at ti=N, x[N+1] = AN xN + BN uN [+ cN]
+    At ti=0, this updates the block equation x1 = A0 x0 + B0 u0 [+ c0], 
+    at ti=N-1, x[N] = A[N-1] x[N-1] + B[N-1] u[N-1] [+ c[N-1]]
+    (recall X = (x0, ..., x[N], u0, ..., u[N-1]))
     Note that since this only deals with the constrain "A" matrix, the affine part ci must be updated separately.
     '''
-    assert ti <= N
-    
+    assert ti < N
+    retval = 0
     if Ad is not None:
         nx = Ad.shape[0]
         for i in range(nx):
             for j in range(nx):
-                updateElem(obj, nx * (ti + 1) + i, nx * ti + j, Ad[i,j])
+                retval += updateElem(obj, nx * (ti + 1) + i, nx * ti + j, Ad[i,j])
 
     if Bd is not None:
         nx, nu = Bd.shape
         for i in range(nx):
             for j in range(nu):
-                updateElem(obj, nx * (ti + 1) + i, (N + 1) * nx + nu * ti + j, Bd[i,j])
+                retval += updateElem(obj, nx * (ti + 1) + i, (N + 1) * nx + nu * ti + j, Bd[i,j])
+    
+    return retval
     
 def updatePolyBlock(obj, nx, nu, N, ti, polyBlocks, pbi, Cdi):
     '''Updates a block in the lower left (Aineq) with a matrix denoting a polyhedron.

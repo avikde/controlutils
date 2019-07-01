@@ -3,7 +3,7 @@ import scipy.sparse as sparse
 
 # These work for sparse as well as CondensedA
 
-def init(nx, nu, N, polyBlocks=None):
+def init(nx, nu, N, periodic=False, polyBlocks=None):
     '''Return scipy sparse.
     If polyBlocks is specified, additional polyhedron membership constraints are added at the bottom.
     The size of these needs to be fixed to maintain the sparsity structure (i.e. Nc-sized polyhedron).
@@ -19,7 +19,16 @@ def init(nx, nu, N, polyBlocks=None):
     Bu = sparse.kron(sparse.vstack([sparse.csc_matrix((1, N)), sparse.eye(N)]), Bd)
     Aeq = sparse.hstack([Ax, Bu])
     Aineq = sparse.block_diag((sparse.kron(sparse.eye(N+1), np.eye(nx)), sparse.eye(N*nu)))
+
+    if periodic:
+        # Equality constraint x0 = xN
+        Aeq = sparse.vstack((Aeq,
+            sparse.hstack((-sparse.eye(nx), np.zeros((nx, (N-1)*nx)), sparse.eye(nx), np.zeros((nx, N * nu))))
+        ))
+    
+    # Put together eq and ineq
     A = sparse.vstack([Aeq, Aineq])
+    
     # Add additional constraints for polyhedra
     if polyBlocks is not None:
         Cpolyx = np.zeros((0,nx))  # will stack rows below for each constraint

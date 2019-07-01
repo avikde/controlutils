@@ -110,7 +110,7 @@ class LTVDirTran:
         self.tqpsolve = np.nan
         self.niter = np.nan
 
-    def initConstraints(self, nx, nu, N, polyBlocks=None, useModelLimits=True):
+    def initConstraints(self, nx, nu, N, periodic=False, polyBlocks=None, useModelLimits=True):
         """Return A, l, u"""
         self.nx = nx
         self.nu = nu
@@ -129,7 +129,7 @@ class LTVDirTran:
 
         # Create the CSC A matrix manually.
         # conA = CondensedA(self.nx, self.nu, N, polyBlocks=polyBlocks)
-        conA = csc.init(nx, nu, N, polyBlocks=polyBlocks)
+        conA = csc.init(nx, nu, N, periodic=periodic, polyBlocks=polyBlocks)
         self.A = sparse.csc_matrix((conA.data, conA.indices, conA.indptr))
         
         # - input and state constraints
@@ -138,6 +138,11 @@ class LTVDirTran:
         
         x0 = np.zeros(nx) # will get updated
         leq = np.hstack([-x0, np.zeros(N*self.nx)])
+
+        if periodic:
+            # -x0 + xN = 0
+            leq = np.hstack((leq, np.zeros(self.nx)))
+
         ueq = leq
         self.l = np.hstack([leq, lineq])
         self.u = np.hstack([ueq, uineq])

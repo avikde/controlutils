@@ -186,7 +186,7 @@ class LTVDirTran:
         assert Ci.shape[1] == self.polyBlocks[pbi][2]
         self.u[ioffs : ioffs + len(di)] = di
 
-    def updateTrajectory(self, x0, u0, trajMode):
+    def updateTrajectory(self, x0, u0, *args, trajMode=GIVEN_POINT_OR_TRAJ):
         """Returns a (N,nx)-shaped traj
         
         trajMode should be one of the constants in the group up top.
@@ -203,7 +203,7 @@ class LTVDirTran:
         self.u[:self.nx] = -xlin
         
         # First dynamics
-        dyn = self.m.getLinearDynamics(xlin, ulin)
+        dyn = self.m.getLinearDynamics(xlin, ulin, *args)
         Ad, Bd = dyn[0:2]
         bAffine = len(dyn) > 2
         
@@ -227,7 +227,7 @@ class LTVDirTran:
                 
             if ti > 0 and (trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ITERATE_TRAJ, PREV_SOL_TRAJ]:
                 # if a trajectory is provided or projected, need to get the newest linearization
-                dyn = self.m.getLinearDynamics(xlin, ulin)
+                dyn = self.m.getLinearDynamics(xlin, ulin, *args)
                 Ad, Bd = dyn[0:2]
             
             # Place new Ad, Bd in Aeq

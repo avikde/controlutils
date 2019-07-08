@@ -154,7 +154,7 @@ class LTVDirTran:
             self.u = np.hstack((self.u, np.full(Nctotal, np.inf)))
         
         # Array to store traj in x and u
-        self.xtraj = np.zeros((self.N + 1, self.nx + self.nu))  # +1 to store the last x
+        self.xtraj = np.zeros((self.N, self.nx + self.nu))  # +1 to store the last x
         return self.A, self.l, self.u
     
     def updateStateConstraint(self, ti, xidx, u=None, l=None):

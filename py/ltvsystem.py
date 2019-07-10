@@ -186,7 +186,7 @@ class LTVDirTran:
         assert Ci.shape[1] == self.polyBlocks[pbi][2]
         self.u[ioffs : ioffs + len(di)] = di
 
-    def updateTrajectory(self, x0, u0, *args, trajMode=GIVEN_POINT_OR_TRAJ):
+    def updateTrajectory(self, x0, u0, trajMode, *args):
         """Returns a (N,nx)-shaped traj
         
         trajMode should be one of the constants in the group up top.

@@ -1,6 +1,6 @@
 import autograd.numpy as np
 import scipy.sparse as sparse # for testing
-import sys
+import sys, time
 try:
     from . import csc, ltvsystem
 except:
@@ -77,10 +77,14 @@ class LTVMPC:
             ugoalCost = False
             u0 = self.ctrl  # use the previous control input
         
+        t0 = time.perf_counter()
         xtraj = self.ltvsys.updateTrajectory(x0, u0, trajMode)
+        t1 = time.perf_counter()
         self.ltvsys.updateObjective(xr=xr, ur=ur, trajMode=trajMode, costMode=costMode, u0=u0, udamp=self.ctrl, ugoalCost=ugoalCost)
-
+        t2 = time.perf_counter()
         self.prevSol = self.ltvsys.solve()
+
+        self.timings = {'updateTrajectory': (t1-t0)*1e3, 'updateObjective': (t2-t1)*1e3, 'qpsolve': (self.ltvsys.tqpsolve)*1e3}
         # Apply first control input to the plant, and store
         self.ctrl = self.prevSol[-self.ltvsys.N*self.ltvsys.nu:-(self.ltvsys.N-1)*self.ltvsys.nu]
 

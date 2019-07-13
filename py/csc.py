@@ -44,8 +44,8 @@ def init(nx, nu, N, periodic=False, polyBlocks=None):
 
     return A.tocsc()
 
-def updateElem(matrix, row_index, col_index, val):
-    """Will update an element; do nothing if that entry is zero. Returns 0 if nothing was updated (element was 0 in the sparse matrix), or 1 if updated successfully.
+def updateElems(matrix, row_index, col_index, vals):
+    """Will update len(vals) elements; do nothing if that entry is zero. Returns 0 if nothing was updated (element was 0 in the sparse matrix), or 1 if updated successfully.
     Derived from https://rushter.com/blog/scipy-sparse-matrices/"""
     # Get col values
     col_start = matrix.indptr[col_index]
@@ -61,8 +61,10 @@ def updateElem(matrix, row_index, col_index, val):
 
     # Find a positional index for a specific row index
     try:
-        value_index = col_indices.index(row_index)
-        col_values[value_index] = val
+        i = col_indices.index(row_index)
+        # Keep updating the col_values until the col ran out, or the user did not request any more
+        for j in range(min(len(vals), len(col_values)-i)):
+            col_values[i + j] = vals[j]
         return 1
     except ValueError:
         # Not found
@@ -98,15 +100,13 @@ def updateDynamics(obj, N, ti, Ad=None, Bd=None):
     retval = 0
     if Ad is not None:
         nx = Ad.shape[0]
-        for i in range(nx):
-            for j in range(nx):
-                retval += updateElem(obj, nx * (ti + 1) + i, nx * ti + j, Ad[i,j])
+        for j in range(nx):
+            retval += updateElems(obj, nx * (ti + 1), nx * ti + j, Ad[:,j])
 
     if Bd is not None:
         nx, nu = Bd.shape
-        for i in range(nx):
-            for j in range(nu):
-                retval += updateElem(obj, nx * (ti + 1) + i, (N + 1) * nx + nu * ti + j, Bd[i,j])
+        for j in range(nu):
+            retval += updateElems(obj, nx * (ti + 1), (N + 1) * nx + nu * ti + j, Bd[:,j])
     
     return retval
     
@@ -141,9 +141,8 @@ def updatePolyBlock(obj, nx, nu, N, ti, polyBlocks, pbi, Cdi):
     ioffs += ti * NcPerTi + NcBeforei
     joffs = nx * ti + xstartj
     
-    for i in range(Nci):
-        for j in range(Ncxi):
-            updateElem(obj, ioffs + i, joffs + j, Cdi[i, j])
+    for j in range(Ncxi):
+        updateElems(obj, ioffs, joffs + j, Cdi[:, j])
     
     return ioffs  # to be helpful
 

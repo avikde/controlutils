@@ -44,26 +44,48 @@ def init(nx, nu, N, periodic=False, polyBlocks=None):
 
     return A.tocsc()
 
+def updateElem(matrix, row_index, col_index, val):
+    """Will update an element; do nothing if that entry is zero. Returns 0 if nothing was updated (element was 0 in the sparse matrix), or 1 if updated successfully.
+    Derived from https://rushter.com/blog/scipy-sparse-matrices/"""
+    # Get col values
+    col_start = matrix.indptr[col_index]
+    col_end = matrix.indptr[col_index + 1]
+    col_values = matrix.data[col_start:col_end]
 
-def updateElem(obj, i, j, val):
-    '''Will update an element; do nothing if that entry is zero
-    Works on scipy sparse as well as CondensedA.
-    Returns 0 if nothing was updated (element was 0 in the sparse matrix), or 1 if updated successfully.
-    '''
+    # Get row indices of occupied values
+    index_start = matrix.indptr[col_index]
+    index_end = matrix.indptr[col_index + 1]
 
-    # indptr has #cols elements, and the entry is the index into data/indices for the first element of that column
-    offs = obj.indptr[j]
-    # 
-    if j < obj.shape[1] - 1:
-        maxOffsThisCol = obj.indptr[j+1]
-    else:
-        maxOffsThisCol = len(obj.indices)
-    while offs < maxOffsThisCol:
-        if obj.indices[offs] == i:
-            obj.data[offs] = val
-            return 1
-        offs += 1
-    return 0
+    # contains indices of occupied cells at a specific col
+    col_indices = list(matrix.indices[index_start:index_end])
+
+    # Find a positional index for a specific row index
+    try:
+        value_index = col_indices.index(row_index)
+        col_values[value_index] = val
+        return 1
+    except ValueError:
+        # Not found
+        return 0
+
+# def updateElem(obj, i, j, val):
+#     '''
+#     Returns 0 if nothing was updated (element was 0 in the sparse matrix), or 1 if updated successfully.
+#     '''
+
+#     # indptr has #cols elements, and the entry is the index into data/indices for the first element of that column
+#     offs = obj.indptr[j]
+#     # 
+#     if j < obj.shape[1] - 1:
+#         maxOffsThisCol = obj.indptr[j+1]
+#     else:
+#         maxOffsThisCol = len(obj.indices)
+#     while offs < maxOffsThisCol:
+#         if obj.indices[offs] == i:
+#             obj.data[offs] = val
+#             return 1
+#         offs += 1
+#     return 0
 
 def updateDynamics(obj, N, ti, Ad=None, Bd=None):
     '''Pass a block to update, and a matrix to go in that block, and it will update all the elements in that block.

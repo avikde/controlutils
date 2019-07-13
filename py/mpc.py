@@ -53,8 +53,8 @@ class LTVMPC:
             trajMode = ltvsystem.GIVEN_POINT_OR_TRAJ
 
         # If there is no trajectory, then the cost can only take the final point
-        if trajMode == ltvsystem.GIVEN_POINT_OR_TRAJ and len(x0.shape) == 1 and costMode == TRAJ:
-            costMode = FINAL
+        if trajMode == ltvsystem.GIVEN_POINT_OR_TRAJ and len(x0.shape) == 1 and costMode == ltvsystem.TRAJ:
+            costMode = ltvsystem.FINAL
             
         return trajMode, costMode
 

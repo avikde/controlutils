@@ -63,9 +63,10 @@ def updateElems(matrix, row_index, col_index, vals):
     try:
         i = col_indices.index(row_index)
         # Keep updating the col_values until the col ran out, or the user did not request any more
-        for j in range(min(len(vals), len(col_values)-i)):
+        Ntoupdate = min(len(vals), len(col_values)-i)
+        for j in range(Ntoupdate):
             col_values[i + j] = vals[j]
-        return 1
+        return Ntoupdate
     except ValueError:
         # Not found
         return 0

@@ -3,7 +3,7 @@ import scipy.sparse as sparse
 
 # These work for sparse as well as CondensedA
 
-def init(nx, nu, N, periodic=False, polyBlocks=None):
+def init(nx, nu, N, stateLim=True, inputLim=True, periodic=False, polyBlocks=None):
     '''Return scipy sparse.
     If polyBlocks is specified, additional polyhedron membership constraints are added at the bottom.
     The size of these needs to be fixed to maintain the sparsity structure (i.e. Nc-sized polyhedron).
@@ -17,17 +17,26 @@ def init(nx, nu, N, periodic=False, polyBlocks=None):
     # Ad, Bd = getLin(x0, ctrl, dt)
     Ax = sparse.kron(sparse.eye(N+1),-sparse.eye(nx)) + sparse.kron(sparse.eye(N+1, k=-1), Ad)
     Bu = sparse.kron(sparse.vstack([sparse.csc_matrix((1, N)), sparse.eye(N)]), Bd)
+    # LTV dynamics constraint
     Aeq = sparse.hstack([Ax, Bu])
-    Aineq = sparse.block_diag((sparse.kron(sparse.eye(N+1), np.eye(nx)), sparse.eye(N*nu)))
 
     if periodic:
         # Equality constraint x0 = xN
         Aeq = sparse.vstack((Aeq,
             sparse.hstack((-sparse.eye(nx), np.zeros((nx, (N-1)*nx)), sparse.eye(nx), np.zeros((nx, N * nu))))
         ))
-    
-    # Put together eq and ineq
-    A = sparse.vstack([Aeq, Aineq])
+
+    if stateLim or inputLim:
+        nLim = 0
+        if stateLim:
+            nLim += (N+1)*nx
+        if inputLim:
+            nLim += N*nu
+        Aineq = sparse.eye(nLim)
+        # Put together eq and ineq
+        A = sparse.vstack([Aeq, Aineq])
+    else:
+        A = Aeq
     
     # Add additional constraints for polyhedra
     if polyBlocks is not None:

@@ -110,12 +110,13 @@ class LTVDirTran:
         self.tqpsolve = np.nan
         self.niter = np.nan
 
-    def initConstraints(self, nx, nu, N, periodic=False, polyBlocks=None, useModelLimits=True):
+    def initConstraints(self, nx, nu, N, useModelLimits=True, **kwargs):
         """Return A, l, u"""
         self.nx = nx
         self.nu = nu
         self.N = N
-        self.polyBlocks = polyBlocks
+        self.polyBlocks = kwargs.get('polyBlocks', None)
+        periodic = kwargs.get('periodic', False)
 
         # Constraints
         if hasattr(self.m, 'limits') and useModelLimits:
@@ -129,7 +130,7 @@ class LTVDirTran:
 
         # Create the CSC A matrix manually.
         # conA = CondensedA(self.nx, self.nu, N, polyBlocks=polyBlocks)
-        conA = csc.init(nx, nu, N, periodic=periodic, polyBlocks=polyBlocks)
+        conA = csc.init(nx, nu, N, **kwargs)
         self.A = sparse.csc_matrix((conA.data, conA.indices, conA.indptr))
         
         # - input and state constraints
@@ -146,7 +147,7 @@ class LTVDirTran:
         ueq = leq
         self.l = np.hstack([leq, lineq])
         self.u = np.hstack([ueq, uineq])
-        if polyBlocks is not None:
+        if self.polyBlocks is not None:
             # Add corresponding RHS elements for polyhedron membership
             # Only C x <= d type constraints
             Nctotal = self.A.shape[0] - len(self.l)

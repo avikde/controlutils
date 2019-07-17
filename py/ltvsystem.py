@@ -117,6 +117,8 @@ class LTVDirTran:
         self.N = N
         self.polyBlocks = kwargs.get('polyBlocks', None)
         periodic = kwargs.get('periodic', False)
+        stateLim = kwargs.get('stateLim', True)
+        inputLim = kwargs.get('inputLim', True)
 
         # Constraints
         if hasattr(self.m, 'limits') and useModelLimits:
@@ -133,10 +135,6 @@ class LTVDirTran:
         conA = csc.init(nx, nu, N, **kwargs)
         self.A = sparse.csc_matrix((conA.data, conA.indices, conA.indptr))
         
-        # - input and state constraints
-        lineq = np.hstack([np.kron(np.ones(N+1), self.xmin), np.kron(np.ones(N), self.umin)])
-        uineq = np.hstack([np.kron(np.ones(N+1), self.xmax), np.kron(np.ones(N), self.umax)])
-        
         x0 = np.zeros(nx) # will get updated
         leq = np.hstack([-x0, np.zeros(N*self.nx)])
 
@@ -145,8 +143,24 @@ class LTVDirTran:
             leq = np.hstack((leq, np.zeros(self.nx)))
 
         ueq = leq
-        self.l = np.hstack([leq, lineq])
-        self.u = np.hstack([ueq, uineq])
+
+        # - input and state constraints
+        if stateLim or inputLim:
+            if stateLim and inputLim:
+                lineq = np.hstack([np.kron(np.ones(N+1), self.xmin), np.kron(np.ones(N), self.umin)])
+                uineq = np.hstack([np.kron(np.ones(N+1), self.xmax), np.kron(np.ones(N), self.umax)])
+            elif stateLim:
+                lineq = np.kron(np.ones(N+1), self.xmin)
+                uineq = np.kron(np.ones(N+1), self.xmax)
+            elif inputLim:
+                lineq = np.kron(np.ones(N), self.umin)
+                uineq = np.kron(np.ones(N), self.umax)
+            self.l = np.hstack([leq, lineq])
+            self.u = np.hstack([ueq, uineq])
+        else:
+            self.l = leq
+            self.u = ueq
+        
         if self.polyBlocks is not None:
             # Add corresponding RHS elements for polyhedron membership
             # Only C x <= d type constraints

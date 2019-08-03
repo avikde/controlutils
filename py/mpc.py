@@ -59,7 +59,7 @@ class LTVMPC:
         return trajMode, costMode
 
 
-    def update(self, x0, xr, u0=None, ur=None, trajMode=ltvsystem.GIVEN_POINT_OR_TRAJ, costMode=ltvsystem.TRAJ, ugoalCost=False):
+    def update(self, x0, xr, *args, u0=None, ur=None, trajMode=ltvsystem.GIVEN_POINT_OR_TRAJ, costMode=ltvsystem.TRAJ, ugoalCost=False):
         '''
         xr --- goal state (placed in the linear term of the objective)
 
@@ -78,7 +78,7 @@ class LTVMPC:
             u0 = self.ctrl  # use the previous control input
         
         t0 = time.perf_counter()
-        xtraj = self.ltvsys.updateTrajectory(x0, u0, trajMode)
+        xtraj = self.ltvsys.updateTrajectory(x0, u0, trajMode, *args)
         t1 = time.perf_counter()
         self.ltvsys.updateObjective(xr=xr, ur=ur, trajMode=trajMode, costMode=costMode, u0=u0, udamp=self.ctrl, ugoalCost=ugoalCost)
         t2 = time.perf_counter()

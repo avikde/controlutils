@@ -218,7 +218,7 @@ class LTVDirTran:
         self.u[:self.nx] = -xlin
         
         # First dynamics
-        dyn = self.m.getLinearDynamics(xlin, ulin, *args)
+        dyn = self.m.getLinearDynamics(xlin, ulin, *args, ti=0)
         Ad, Bd = dyn[0:2]
         bAffine = len(dyn) > 2
         
@@ -233,7 +233,7 @@ class LTVDirTran:
             # Get linearization point by iterating a provided input
             elif trajMode in [ITERATE_TRAJ] and ti > 0:
                 # update the point at which the next linearization will happen
-                xlin = self.m.dynamics(xlin, ulin)
+                xlin = self.m.dynamics(xlin, ulin, ti=ti)
             elif trajMode == PREV_SOL_TRAJ:
                 # use the previous solution shifted by 1 timestep (till the end)
                 # NOTE: uses the end point twice (probably matters least then anyway)
@@ -242,7 +242,7 @@ class LTVDirTran:
                 
             if ti > 0 and (trajMode == GIVEN_POINT_OR_TRAJ and len(x0.shape) > 1) or trajMode in [ITERATE_TRAJ, PREV_SOL_TRAJ]:
                 # if a trajectory is provided or projected, need to get the newest linearization
-                dyn = self.m.getLinearDynamics(xlin, ulin, *args)
+                dyn = self.m.getLinearDynamics(xlin, ulin, *args, ti=ti)
                 Ad, Bd = dyn[0:2]
             
             # Place new Ad, Bd in Aeq

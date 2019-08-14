@@ -42,3 +42,12 @@ class Model:
     def getLinearDynamics(self, y, u, *args):
         """Implementation that can be overriden"""
         return self.autoDLin(y, u, *args)
+    
+    def modelInfo(self, opt, traj):
+        # number of knot points
+        N = ((len(traj) - (1 if opt['vart'] else 0)) // (self.ny + self.nu)) - 1
+        δt = traj[-1] if opt['vart'] else opt['fixedδt']
+        yk = lambda k : traj[k*self.ny : (k+1)*self.ny]
+        uk = lambda k : traj[(N+1)*self.ny + k*self.nu : (N+1)*self.ny + (k+1)*self.nu]
+        return N, δt, yk, uk
+    

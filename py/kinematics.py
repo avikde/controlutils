@@ -38,7 +38,7 @@ def rot(phi, euler=False):
         else:
             return Rotation.from_rotvec(phi).as_dcm()
 
-def affineKinematics(q, dt, fullTwist=True):
+def affineKinematics(q, dt, fullTwist=True, euler=False):
     '''Linearized kinematics of applying an SE(n) twist to a pose.
     q = input pose
     dt = time to apply twist (should be small for accuracy)
@@ -60,13 +60,13 @@ def affineKinematics(q, dt, fullTwist=True):
         else:
             # 3DOF twist corresponding to the horizontal plane
             return dt * np.block([
-                [rot(q[3:6])[:,0:2], np.zeros((3, 1))],
+                [rot(q[3:6], euler=euler)[:,0:2], np.zeros((3, 1))],
                 [np.zeros((3, 2)), np.array([[0], [0], [1]])]
             ])
     else:
         raise 'Size can only be 3 or 6'
 
-def applyTwist(q0, twistDes, dt):
+def applyTwist(q0, twistDes, dt, euler=False):
     '''Integrates up the twist. Should work regardless of SE(2) or SE(3).
     '''
     if len(twistDes) != 3:
@@ -74,7 +74,7 @@ def applyTwist(q0, twistDes, dt):
     if len(q0) == 3:
         Btwist = affineKinematics(q0, dt)
     elif len(q0) == 6:
-        Btwist = affineKinematics(q0, dt, fullTwist=False)
+        Btwist = affineKinematics(q0, dt, fullTwist=False, euler=euler)
     else:
         raise ValueError('Only 3DOF or 6DOF pose supported')
     return q0 + Btwist @ twistDes
